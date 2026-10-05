@@ -10,6 +10,8 @@ recorded.
 
 ---
 
+Phase-by-phase completion status: [`docs/playbook-checklist.md`](docs/playbook-checklist.md).
+
 ## Project description
 
 PulseRun is a pay-per-run compute and CI runner protocol built on Stellar and

@@ -7,6 +7,7 @@
 ## Protocol
 
 - [Protocol mechanics](protocol-mechanics.md)
+- [Contract architecture](architecture.md)
 - [Smart contract reference](contract-reference.md)
 
 ## Guides
@@ -19,3 +20,8 @@
 ## Deployments
 
 - [Testnet](deployments/testnet.md)
+
+## For agents
+
+- [Contract system prompt](contract-system-prompt.md)
+- [Application system prompt](app-system-prompt.md)
