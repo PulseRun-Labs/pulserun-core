@@ -102,7 +102,7 @@ which creates every issue below in one idempotent run. Run it once and the
 - [ ] `scripts/deploy-testnet.sh` run; ids recorded in [`docs/deployments/testnet.md`](docs/deployments/testnet.md)
 - [ ] `PULSEESCROW_ID`/`MOCKTOKEN_ID` set in the client's env (local and hosting)
 - [ ] `scripts/create-issues.sh` run; `wave`-labeled issues visible
-- [ ] `scripts/setup-branch-protection.sh` run; PRs + required checks enforced
+- [ ] `scripts/setup-repo.sh` run with an admin token; topics set, PRs + required checks enforced
 - [ ] Release tagged `v0.1.0` with deployed addresses in the body
 - [ ] Docs site published; demo video recorded
 - [ ] Maintainer Telegram handle filled in `README.md`
