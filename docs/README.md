@@ -22,6 +22,18 @@ committed *before* the job runs and settled for exactly the seconds that
 executed, so the payer never funds idle capacity and the runner is always
 funded before starting.
 
+## Stellar-native by design
+
+The protocol does not merely happen to run on Stellar — it depends on it. The
+escrow is a **Soroban smart contract** that custodies funds and enforces
+settlement; jobs settle in any **SEP-41 token or its Stellar Asset Contract
+(SAC)**, so requesters pay in the assets Stellar already moves, with no wrapping;
+and per-run settlement is only economically sensible because Stellar settles
+cheaply and quickly. Authorization comes from **`Address::require_auth`** on the
+requester and runner, and the dispute window and job timeout are measured against
+the **ledger timestamp**. Remove any of those and the design does not exist. More
+detail in the [repository README](../README.md#built-on-stellar--soroban).
+
 ## How it works
 
 1. A **requester** calls `create_job`, which moves the full `max_budget` into
