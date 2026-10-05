@@ -4,32 +4,94 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://stellar.org/soroban"><img src="https://img.shields.io/badge/Stellar-Soroban-7D00FF.svg" alt="Built on Stellar"></a>
+  <a href="https://stellar.org/soroban"><img src="https://img.shields.io/badge/Stellar-Soroban-7D00FF.svg" alt="Stellar Soroban"></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-2021-000000.svg" alt="Rust 2021"></a>
   <a href="../../actions/workflows/ci.yml"><img src="https://github.com/PulseRun-Labs/pulserun-core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.drips.network/wave/stellar"><img src="https://img.shields.io/badge/Drips-Stellar%20Wave-000000.svg" alt="Drips Stellar Wave"></a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/PulseRun-Labs/pulserun-core">Repository</a> ·
-  <a href="docs/README.md">Docs</a> ·
-  <a href="SUBMISSION.md">Submission</a> ·
-  <a href="https://github.com/PulseRun-Labs/pulserun-client">Client app</a>
 </p>
 
 # PulseRun Core
 
 On-chain **escrow and settlement** for [PulseRun](https://pulserun.com), a
-pay-per-run compute and CI runner protocol on [Stellar](https://stellar.org).
-A requester locks a budget up front; a runner executes a job and submits a
-metered proof; the contract pays for the seconds actually executed and returns
-the unspent remainder. No invoices, no trust, no custodians.
+pay-per-run compute and CI runner protocol. A requester locks a budget on-chain
+before a job starts; a runner executes the job and submits a metered proof; a
+Soroban smart contract pays for the seconds actually executed and returns the
+unspent remainder. No invoices, no trust, no custodians.
 
-Settlement runs on [Soroban](https://stellar.org/soroban) and settles in any
-SEP-41 token (or its Stellar Asset Contract). This repository is the contracts
-half of the project; the application layer lives in
-[`pulserun-client`](https://github.com/PulseRun-Labs/pulserun-client).
+This repository is the **contracts** half of PulseRun. The application layer
+lives in [`pulserun-client`](https://github.com/PulseRun-Labs/pulserun-client).
 
 ---
+
+## Contents
+
+- [Why PulseRun](#why-pulserun)
+- [Built on Stellar & Soroban](#built-on-stellar--soroban)
+- [Maintainers](#maintainers)
+- [Architecture](#architecture)
+- [Job lifecycle](#job-lifecycle)
+- [Settlement math](#settlement-math)
+- [Repository layout](#repository-layout)
+- [Contract API](#contract-api)
+- [Quick start](#quick-start)
+- [Security model](#security-model)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Why PulseRun
+
+Compute and CI work is metered and bursty, but it is almost always paid for
+retroactively. That mismatch has a measurable cost:
+
+- **27% of cloud spend is wasted**, mostly on idle or over-provisioned resources
+  ([Flexera, *State of the Cloud 2025*](https://www.flexera.com/)).
+- An estimated **21% of enterprise cloud infrastructure spend — $44.5B in 2025 —
+  goes to underutilized resources**
+  ([Harness, *FinOps in Focus*](https://www.prnewswire.com/news-releases/44-5-billion-in-infrastructure-cloud-waste-projected-for-2025-due-to-finops-and-developer-disconnect-finds-finops-in-focus-report-from-harness-302385580.html)).
+- **83% of container cost is associated with idle resources**
+  ([Datadog](https://www.datadoghq.com/state-of-cloud-costs/)).
+
+Pay-per-run inverts the payment model so a payer never funds idle capacity and a
+runner is funded before starting. The escrow enforces the terms on both sides:
+
+| Property | Mechanism |
+| --- | --- |
+| A runner is always funded | `create_job` transfers the full `max_budget` into the contract before the job is written. |
+| A requester can never be overbilled | Proof durations are bounded by `max_duration_secs` and payout is hard-capped at `max_budget`. |
+| Either side can escalate | Payout is frozen for `dispute_window_secs`; `dispute_job` halts it pending resolution. |
+
+## Built on Stellar & Soroban
+
+Stellar and Soroban are not decorative here — the protocol is only possible
+because of what the network provides:
+
+- **Soroban smart contracts are the escrow.** The budget is custodied by a
+  `#[contract]` deployed to Soroban. Without an on-chain contract VM that can
+  hold and transfer value under program logic, there is no trustless escrow to
+  build.
+- **Settlement in Stellar assets via the Stellar Asset Contract (SAC).** Jobs
+  settle in any SEP-41 token, including the SAC of a Stellar-issued asset such
+  as a stablecoin — so requesters pay in the asset they already hold, with no
+  wrapping or bridged counterparty.
+- **Metering is economically viable because settlement is cheap and fast.**
+  Pay-per-run only works if settling a single run is cheap relative to the run.
+  Stellar's low fees and roughly five-second ledger close make per-job
+  settlement practical where a per-transaction fee of dollars would make it
+  absurd.
+- **Authorization and account model.** `Address::require_auth` on requesters and
+  runners gives the contract cryptographic proof of who agreed to the terms,
+  including for smart-wallet (contract) accounts.
+- **Ledger time drives the protocol.** The dispute window and the unclaimed-job
+  timeout are both measured against `env.ledger().timestamp()`, so the clock is
+  the network's, not an operator's.
+- **Deterministic WASM.** Contracts compile to `wasm32v1-none` and deploy
+  through the Stellar toolchain, so the settlement logic that runs on-chain is
+  the logic in this repo, verifiable byte for byte.
+
+If you lifted this design onto a chain without a general-purpose contract VM, or
+without an on-chain asset rail to settle in, it would not exist. That is the
+point.
 
 ## Maintainers
 
@@ -45,36 +107,8 @@ half of the project; the application layer lives in
   </tr>
 </table>
 
-<!--
-TODO before submitting to Drips Wave:
-  1. Replace PLACEHOLDER_TELEGRAM with the maintainer's real Telegram handle.
-  2. Add teammates as extra <td> cells if there are more maintainers.
--->
-
-Community: [GitHub Discussions](https://github.com/PulseRun-Labs/pulserun-core/discussions)
-· [Drips Stellar Wave](https://www.drips.network/wave/stellar)
-
----
-
-## Why it exists
-
-CI and compute work is metered and bursty, but payment is usually batched and
-retroactive. PulseRun inverts that: **the money is already on the table before
-the job starts**. The escrow contract enforces three properties that make
-pay-per-run safe for both sides:
-
-| Property | Mechanism |
-| --- | --- |
-| A runner is always funded | `create_job` transfers the full `max_budget` into the contract before the job is written. |
-| A requester can never be overbilled | Proof durations are bounded by `max_duration_secs` and payout is hard-capped at `max_budget`. |
-| Either side can escalate | Payout is frozen for `dispute_window_secs`; `dispute_job` halts it indefinitely pending resolution. |
-
-The scale of the problem is real: 27% of cloud spend is wasted on idle or
-over-provisioned resources (Flexera, *State of the Cloud 2025*), and 83% of
-container cost is associated with idle resources (Datadog). Pay-per-run removes
-the funding of unused capacity from the model.
-
----
+<!-- TODO: replace PLACEHOLDER_TELEGRAM with the maintainer's real handle, and
+     add teammates as extra <td> cells if there are more maintainers. -->
 
 ## Architecture
 
@@ -109,16 +143,15 @@ stateDiagram-v2
 ### Settlement math
 
 ```text
-metered      = proof.duration_secs            (validated: 1 ..= max_duration_secs)
-earnings     = min(rate_per_second * metered, max_budget)   (runner)
-refund       = max_budget - earnings                        (requester)
+duration     = proof.duration_secs            (validated: 1 ..= max_duration_secs)
+earnings     = min(rate_per_second * duration, max_budget)   (runner)
+refund       = max_budget - earnings                         (requester)
 ```
 
 Because `create_job` escrows the whole `max_budget`, settlement is fully
 self-contained: it only ever moves money already in the contract, so it cannot
-fail for lack of funds. Full mechanics: [`docs/protocol-mechanics.md`](docs/protocol-mechanics.md).
-
----
+fail for lack of funds. Full mechanics:
+[`docs/protocol-mechanics.md`](docs/protocol-mechanics.md).
 
 ## Repository layout
 
@@ -133,13 +166,11 @@ pulserun-core/
 │   │       ├── errors.rs    # stable error codes
 │   │       └── test.rs      # integration-style unit tests
 │   └── mock_token/      # minimal SEP-41-style token for tests
-├── docs/                # GitBook documentation site
+├── docs/                # documentation site
 ├── scripts/             # deploy + issue-generation tooling
 ├── .github/workflows/   # CI: fmt, clippy, test, wasm build
 └── Cargo.toml           # workspace
 ```
-
----
 
 ## Contract API
 
@@ -155,13 +186,10 @@ pulserun-core/
 | `cancel_unclaimed_job(requester, job_id)` | requester | After `max_duration_secs`: refunds a still-`Queued` job in full. |
 | `get_job` / `get_proof` / `job_count` / `dispute_window` / `admin` | view | Read-only accessors. |
 
-Full reference including error codes: [`docs/contract-reference.md`](docs/contract-reference.md).
-Error codes are enumerated in [`contracts/escrow/src/errors.rs`](contracts/escrow/src/errors.rs)
-and are part of the public ABI — branch on the numeric value, not the name.
+Full reference including error codes:
+[`docs/contract-reference.md`](docs/contract-reference.md).
 
----
-
-## Zero-friction local build & test
+## Quick start
 
 Everything runs with a stock Rust toolchain — no Stellar CLI, no Docker, no
 network services.
@@ -197,12 +225,10 @@ Artifacts land in `target/wasm32v1-none/release/{pulserun_escrow,mock_token}.was
 ./scripts/deploy-testnet.sh        # builds, deploys in order, prints contract ids
 ```
 
-The script does the network/identity setup, deploys `mock_token` then the escrow
-(the escrow depends on a token), calls `init`, and prints copy-pasteable contract
-ids. See [`docs/deployments/testnet.md`](docs/deployments/testnet.md) to record
-them.
-
----
+The script configures the network and identity, deploys `mock_token` then the
+escrow (the escrow settles in a token), calls `init`, and prints
+copy-pasteable contract ids. See
+[`docs/deployments/testnet.md`](docs/deployments/testnet.md) to record them.
 
 ## Security model
 
@@ -221,18 +247,12 @@ This code is **unaudited**. Treat it as a reference implementation and get an
 independent review before mainnet use. See [`SECURITY.md`](SECURITY.md) to
 report a vulnerability privately.
 
----
-
 ## Contributing
 
-We participate in **Drips Wave**. Issues are labeled by effort — `100pts`
-(trivial), `150pts` (medium), `200pts` (high) — and every change runs the
-standard CI gate. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md); planned work
-is listed in [`SUBMISSION.md`](SUBMISSION.md#planned-issues).
-
-## Contributors
-
-Thanks to everyone who has contributed to PulseRun Core.
+Contributions are welcome through pull requests. Every change runs the CI gate
+(`fmt`, `clippy -D warnings`, `test`, wasm build). Start with
+[`CONTRIBUTING.md`](CONTRIBUTING.md); open work is listed in the
+[issue backlog](https://github.com/PulseRun-Labs/pulserun-core/issues).
 
 <a href="https://github.com/PulseRun-Labs/pulserun-core/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=PulseRun-Labs/pulserun-core" alt="Contributors" />

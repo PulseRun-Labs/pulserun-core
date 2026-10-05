@@ -29,12 +29,13 @@ Clippy is a hard gate: `-D warnings` means one lint fails the build.
 - **Tests are mandatory.** New behavior needs a test covering the failure path
   and asserting the error code through a `try_*` client.
 
-## Drips Wave
+## Finding and scoping work
 
-Issues are labeled by effort and carry point values: `trivial` (100),
-`medium` (150), `high` (200). To claim work, pick an open `wave` issue, comment
-to be assigned, and open a draft PR early. Push until the full gate is green and
-keep the diff focused on the issue.
+Open work is tracked in the [issue backlog](../../issues). Issues carry a size
+label — `trivial`, `medium`, or `high` — so you can pick something that matches
+the time you have. To pick up work, choose an issue, comment to be assigned, and
+open a draft PR early. Push until the full gate is green and keep the diff
+focused on the issue.
 
 ## Reporting security issues
 

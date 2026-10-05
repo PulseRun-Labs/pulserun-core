@@ -68,20 +68,21 @@ escrow.submit_proof(&w.runner, &proof(&w.env, job_id, 20, 0));
   `assert_eq!(escrow.try_claim_payout(&job_id), Err(Ok(Error::DisputeWindowActive)))`.
 - Keep each test to one behavior, and name it as a sentence about that behavior.
 
-## Drips Wave workflow
+## Finding and scoping work
 
-We use [Drips Wave](https://www.drips.network/wave) to scope and reward
-contributions. Issues carry an effort label and a point value:
+Open work is tracked in the [issue backlog](https://github.com/PulseRun-Labs/pulserun-core/issues).
+Issues carry a size label so you can pick something that matches the time you
+have:
 
-| Label | Points | Scope |
-| --- | --- | --- |
-| `trivial` | **100** | Docs, tiny fixes, isolated tests, one-file changes. |
-| `medium` | **150** | A new entrypoint, a storage change, or a multi-case test suite. |
-| `high` | **200** | Cross-cutting design work: new settlement flows, gas/perf, security hardening. |
+| Label | Scope |
+| --- | --- |
+| `trivial` | Docs, tiny fixes, isolated tests, one-file changes. |
+| `medium` | A new entrypoint, a storage change, or a multi-case test suite. |
+| `high` | Cross-cutting design work: new settlement flows, gas/perf, security hardening. |
 
-**How to claim work**
+**How to pick up work**
 
-1. Pick an open issue labeled `wave` and comment to be assigned it.
+1. Find an open issue you want and comment to be assigned it.
 2. Open a **draft PR** early and link the issue (`Closes #123`).
 3. Push until the full gate is green; keep the diff focused on the issue.
 4. Request review once CI passes. Keep the PR description's checklist honest.
@@ -93,7 +94,7 @@ without your change, and the PR has no unrelated edits.
 
 Use the [pull request template](.github/pull_request_template.md). A good PR:
 
-- Links its issue and states the point value it targets.
+- Links its issue and states the scope it targets.
 - Explains *why*, not just *what*.
 - Calls out anything a reviewer should scrutinize (state transitions, arithmetic,
   authorization, TTL, ABI changes).
