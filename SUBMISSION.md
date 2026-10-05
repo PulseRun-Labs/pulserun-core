@@ -34,8 +34,8 @@ application layer lives in `pulserun-client`.
 | Live app | `TO_BE_FILLED` | not deployed |
 | Documentation site | `TO_BE_FILLED` (GitBook from `docs/`) | not published |
 | Demo video | `TO_BE_FILLED` | required before submission |
-| Testnet `PulseEscrow` | `TO_BE_FILLED` | not deployed |
-| Testnet explorer | `TO_BE_FILLED` | after deploy |
+| Testnet `PulseEscrow` | [`CCEBIZGVFQMOA4T2UKI5WC7PCEYGT3IDCZC75VWMMH3CHRE55BGNGTYB`](https://stellar.expert/explorer/testnet/contract/CCEBIZGVFQMOA4T2UKI5WC7PCEYGT3IDCZC75VWMMH3CHRE55BGNGTYB) | deployed + verified |
+| Testnet `MockToken` | [`CCCNLWIQ2MZVXDNC2BTTHNGFRBP65EEJHEHCNFR5TUSLTLVDYO6HHVF6`](https://stellar.expert/explorer/testnet/contract/CCCNLWIQ2MZVXDNC2BTTHNGFRBP65EEJHEHCNFR5TUSLTLVDYO6HHVF6) | deployed |
 
 Do not submit without a working demo video showing the end-to-end flow: create a
 job, submit a proof, let the dispute window elapse, claim payout, and confirm the
@@ -101,11 +101,11 @@ time they have.
 
 ## Pre-submission checklist
 
-- [ ] `scripts/deploy-testnet.sh` run; ids recorded in [`docs/deployments/testnet.md`](docs/deployments/testnet.md)
+- [x] `scripts/deploy-testnet.sh` run; ids recorded in [`docs/deployments/testnet.md`](docs/deployments/testnet.md)
 - [ ] `PULSEESCROW_ID`/`MOCKTOKEN_ID` set in the client's env (local and hosting)
-- [ ] `scripts/create-issues.sh` run; backlog issues visible
+- [x] `scripts/create-issues.sh` run; backlog issues visible
 - [ ] `scripts/setup-repo.sh` run with an admin token; topics set, PRs + required checks enforced
-- [ ] Release tagged `v0.1.0` with deployed addresses in the body
+- [x] Release tagged `v0.1.0` with deployed addresses in the body
 - [ ] Docs site published; demo video recorded
 - [ ] Maintainer Telegram handle filled in `README.md`
 - [ ] Remove this file (or keep it clearly marked as an application) before submitting
