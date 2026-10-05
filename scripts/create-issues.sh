@@ -16,13 +16,13 @@ GH=(gh -R "${REPO}")
 
 echo "==> Creating/updating labels on ${REPO}"
 create_label() { "${GH[@]}" label create "$1" --color "$2" --description "$3" --force >/dev/null; }
-create_label "wave"          "7D00FF" "Drips Wave program issue"
-create_label "trivial"       "C5DEF5" "Wave effort: trivial"
-create_label "medium"        "BFD4F2" "Wave effort: medium"
-create_label "high"          "D4C5F9" "Wave effort: high"
-create_label "100pts"        "0E8A16" "Wave points: 100"
-create_label "150pts"        "1D76DB" "Wave points: 150"
-create_label "200pts"        "B60205" "Wave points: 200"
+create_label "backlog"       "7D00FF" "Planned backlog task"
+create_label "trivial"       "C5DEF5" "Effort: trivial"
+create_label "medium"        "BFD4F2" "Effort: medium"
+create_label "high"          "D4C5F9" "Effort: high"
+create_label "100pts"        "0E8A16" "Size points: 100"
+create_label "150pts"        "1D76DB" "Size points: 150"
+create_label "200pts"        "B60205" "Size points: 200"
 create_label "smart-contract" "5319E7" "Soroban contract work"
 create_label "testing"       "FBCA04" "Test coverage"
 create_label "security"      "D93F0B" "Security-relevant"
@@ -46,7 +46,7 @@ echo "==> Creating issues"
 
 create_issue \
   "feat(escrow): emit contract events on lifecycle transitions" \
-  "wave,medium,150pts,smart-contract" \
+  "backlog,medium,150pts,smart-contract" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -70,7 +70,7 @@ EOF
 
 create_issue \
   "feat(escrow): add admin dispute resolution to split or refund escrowed funds" \
-  "wave,high,200pts,smart-contract,security" \
+  "backlog,high,200pts,smart-contract,security" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -95,7 +95,7 @@ EOF
 
 create_issue \
   "feat(escrow): add runner accept/decline so runners are not silently assigned" \
-  "wave,medium,150pts,smart-contract" \
+  "backlog,medium,150pts,smart-contract" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -120,7 +120,7 @@ EOF
 
 create_issue \
   "feat(escrow): add paginated listing of jobs by requester and runner" \
-  "wave,medium,150pts,smart-contract" \
+  "backlog,medium,150pts,smart-contract" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -144,7 +144,7 @@ EOF
 
 create_issue \
   "feat(escrow): emit a protocol fee to the admin on settlement" \
-  "wave,high,200pts,smart-contract" \
+  "backlog,high,200pts,smart-contract" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -168,7 +168,7 @@ EOF
 
 create_issue \
   "feat(escrow): allow anyone to trigger timeout refund after a grace period" \
-  "wave,medium,150pts,smart-contract" \
+  "backlog,medium,150pts,smart-contract" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -193,7 +193,7 @@ EOF
 
 create_issue \
   "feat(escrow): add update_dispute_window admin entrypoint and get_config view" \
-  "wave,trivial,100pts,smart-contract" \
+  "backlog,trivial,100pts,smart-contract" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -216,7 +216,7 @@ EOF
 
 create_issue \
   "test(escrow): add invariant test that contract balance equals sum of open escrows" \
-  "wave,high,200pts,testing" \
+  "backlog,high,200pts,testing" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -240,7 +240,7 @@ EOF
 
 create_issue \
   "test(escrow): add table-driven cases for settlement cap and duration bounds" \
-  "wave,medium,150pts,testing" \
+  "backlog,medium,150pts,testing" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -263,7 +263,7 @@ EOF
 
 create_issue \
   "test(mock_token): cover burn insufficiencies and self-transfer edges" \
-  "wave,trivial,100pts,testing" \
+  "backlog,trivial,100pts,testing" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -286,7 +286,7 @@ EOF
 
 create_issue \
   "feat(escrow): validate payment_token is a contract before locking collateral" \
-  "wave,medium,150pts,smart-contract,security" \
+  "backlog,medium,150pts,smart-contract,security" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -310,7 +310,7 @@ EOF
 
 create_issue \
   "feat(escrow): add emergency pause for create_job and claim_payout" \
-  "wave,high,200pts,smart-contract,security" \
+  "backlog,high,200pts,smart-contract,security" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -335,7 +335,7 @@ EOF
 
 create_issue \
   "feat(escrow): add per-job metadata hash for off-chain job specs" \
-  "wave,medium,150pts,smart-contract" \
+  "backlog,medium,150pts,smart-contract" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -359,7 +359,7 @@ EOF
 
 create_issue \
   "ci: add cargo-deny dependency and license audit job" \
-  "wave,trivial,100pts,ci" \
+  "backlog,trivial,100pts,ci" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -382,7 +382,7 @@ EOF
 
 create_issue \
   "ci(wasm): assert wasm size budget and publish artifacts per release" \
-  "wave,trivial,100pts,ci" \
+  "backlog,trivial,100pts,ci" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -404,7 +404,7 @@ EOF
 
 create_issue \
   "docs: write a threat model and storage/TTL migration note" \
-  "wave,medium,150pts,documentation" \
+  "backlog,medium,150pts,documentation" \
   "$(cat <<'EOF'
 ## Summary
 
@@ -426,4 +426,4 @@ Markdown. Adds `docs/threat-model.md`.
 EOF
 )"
 
-echo "==> Done. View the backlog: gh issue list -R ${REPO} --label wave"
+echo "==> Done. View the backlog: gh issue list -R ${REPO} --label backlog"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Apply the repo-level settings expected of an approved Stellar Wave repo:
-# discoverability topics and branch protection on `main`.
+# Apply repo-level settings for a well-run public repo: discoverability topics
+# and branch protection on `main`.
 #
 # NOTE ON PERMISSIONS: both operations require the `administration` permission.
 # A fine-grained integration token can hold `admin: true` on the repo and still

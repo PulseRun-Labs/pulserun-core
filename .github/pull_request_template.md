@@ -11,13 +11,13 @@ reviewers use it to decide what to scrutinize.
 
 <!-- e.g. Closes #123 -->
 
-## Wave points
+## Scope
 
 <!-- Delete what doesn't apply. -->
 - [ ] `trivial` — 100 pts
 - [ ] `medium` — 150 pts
 - [ ] `high` — 200 pts
-- [ ] Not a Wave issue
+- [ ] Not applicable
 
 ## Changes
 
