@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref to keep CI cheap.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  # soroban-sdk v28 requires the build system to advertise spec-shaking support
+  # before it will emit a contract wasm. The Stellar CLI sets this itself; for a
+  # plain `cargo build --target wasm32v1-none` we set it here so CI can compile
+  # the wasm without installing the CLI. Deployment builds should still use
+  # `stellar contract build`.
+  SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: "1"
+
+jobs:
+  lint-and-test:
+    name: fmt · clippy · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          target: wasm32v1-none
+
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --all
+
+  wasm:
+    name: build wasm32v1-none
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32v1-none
+
+      - name: Build contracts
+        run: cargo build --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+
+      - name: Upload wasm artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulserun-contracts-wasm
+          path: target/wasm32v1-none/release/*.wasm
+          if-no-files-found: error
+          retention-days: 14

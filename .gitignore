@@ -1,0 +1,26 @@
+# Rust / Cargo build artifacts
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Soroban test snapshots
+test_snapshots/
+
+# Soroban / Stellar CLI artifacts
+.wasm
+*.wasm
+.soroban/
+.ste11ar/
+stellar/
+
+# Editor / OS noise
+*.swp
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Env / secrets
+.env
+.env.*
+!.env.example
