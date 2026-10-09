@@ -97,7 +97,7 @@ are invoked the same way and simulated without signing.
 ## Deploying to testnet
 
 See [`deployments/testnet.md`](deployments/testnet.md) and
-[`scripts/deploy-testnet.sh`](../scripts/deploy-testnet.sh).
+[`scripts/deploy-testnet.sh`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/scripts/deploy-testnet.sh).
 
 ## Adding a new failure mode
 
@@ -118,4 +118,5 @@ See [`deployments/testnet.md`](deployments/testnet.md) and
 - Types live in `types.rs` and derive `Clone, Debug, Eq, PartialEq`.
 - Validate the caller against stored state, then call `require_auth()`.
 
-Full conventions are in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+Full conventions are in
+[`CONTRIBUTING.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/CONTRIBUTING.md).

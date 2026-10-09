@@ -1,6 +1,8 @@
 # Smart contract reference
 
-`PulseEscrow` lives at [`contracts/escrow/`](../contracts/escrow/). All amounts
+`PulseEscrow` lives at
+[`contracts/escrow/`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/escrow).
+All amounts
 are in the `payment_token`'s base units. Every mutating entrypoint returns a
 typed [`Error`](#error-codes) rather than panicking.
 
@@ -103,7 +105,8 @@ Errors: `JobNotFound`, `InvalidStatus`, `Unauthorized`, `JobNotExpired`,
 
 The current contracts **emit no events.** Indexers must poll views. Emitting
 `contractevent`s on create, proof, settle, dispute, and refund is tracked as
-planned work — see the planned issues in [`SUBMISSION.md`](../SUBMISSION.md).
+planned work — see the planned issues in
+[`SUBMISSION.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/SUBMISSION.md).
 
 ## Error codes
 
@@ -129,7 +132,8 @@ variant name. Codes are never renumbered.
 
 ## Mock token
 
-[`contracts/mock_token/`](../contracts/mock_token/) implements just enough of the
+[`contracts/mock_token/`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/mock_token)
+implements just enough of the
 token surface for tests: `mint`, `burn`, `balance`, and `transfer` (with
 `from.require_auth()`). Its `mint` is unauthenticated and **test-only** — never
 deploy it as real money. In production, pass a SEP-41 token or its Stellar Asset

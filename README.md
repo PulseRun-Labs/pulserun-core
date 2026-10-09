@@ -7,6 +7,7 @@
   <a href="https://stellar.org/soroban"><img src="https://img.shields.io/badge/Stellar-Soroban-7D00FF.svg" alt="Stellar Soroban"></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-2021-000000.svg" alt="Rust 2021"></a>
   <a href="../../actions/workflows/ci.yml"><img src="https://github.com/PulseRun-Labs/pulserun-core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://pulserun-labs.github.io/pulserun-core/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-0969da.svg" alt="Docs"></a>
 </p>
 
 # PulseRun Core
@@ -19,6 +20,10 @@ unspent remainder. No invoices, no trust, no custodians.
 
 This repository is the **contracts** half of PulseRun. The application layer
 lives in [`pulserun-client`](https://github.com/PulseRun-Labs/pulserun-client).
+
+📖 **[Documentation](https://pulserun-labs.github.io/pulserun-core/)** — the
+full protocol mechanics, contract reference, and per-persona guides are
+published on GitHub Pages.
 
 ---
 
@@ -166,7 +171,7 @@ pulserun-core/
 │   │       ├── errors.rs    # stable error codes
 │   │       └── test.rs      # integration-style unit tests
 │   └── mock_token/      # minimal SEP-41-style token for tests
-├── docs/                # documentation site
+├── docs/                # documentation source (mdBook → GitHub Pages)
 ├── scripts/             # deploy + issue-generation tooling
 ├── .github/workflows/   # CI: fmt, clippy, test, wasm build
 └── Cargo.toml           # workspace

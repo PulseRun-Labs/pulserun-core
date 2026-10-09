@@ -1,6 +1,8 @@
 # Contributing
 
-The canonical guide is [`CONTRIBUTING.md`](../CONTRIBUTING.md) at the repository
+The canonical guide is
+[`CONTRIBUTING.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/CONTRIBUTING.md)
+at the repository
 root. This page is the short version.
 
 ## The gate
@@ -31,7 +33,9 @@ Clippy is a hard gate: `-D warnings` means one lint fails the build.
 
 ## Finding and scoping work
 
-Open work is tracked in the [issue backlog](../../issues). Issues carry a size
+Open work is tracked in the
+[issue backlog](https://github.com/PulseRun-Labs/pulserun-core/issues). Issues
+carry a size
 label — `trivial`, `medium`, or `high` — so you can pick something that matches
 the time you have. To pick up work, choose an issue, comment to be assigned, and
 open a draft PR early. Push until the full gate is green and keep the diff
@@ -39,4 +43,5 @@ focused on the issue.
 
 ## Reporting security issues
 
-Do not open a public issue. See [`SECURITY.md`](../SECURITY.md).
+Do not open a public issue. See
+[`SECURITY.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/SECURITY.md).

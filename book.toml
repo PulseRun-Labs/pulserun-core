@@ -1,0 +1,22 @@
+[book]
+title = "PulseRun Core"
+authors = ["PulseRun Labs"]
+description = "On-chain escrow and settlement for PulseRun, a pay-per-run compute and CI runner protocol on Stellar."
+src = "docs"
+language = "en"
+multilingual = false
+
+# `mdbook build` writes the rendered site here; `book/` is git-ignored.
+[build]
+build-dir = "book"
+
+[output.html]
+# Served from a project page: https://pulserun-labs.github.io/pulserun-core/
+# A root-absolute path keeps the search index and navigation links correct
+# when the site is not hosted at the domain root.
+site-url = "/pulserun-core/"
+git-repository-url = "https://github.com/PulseRun-Labs/pulserun-core"
+edit-url-template = "https://github.com/PulseRun-Labs/pulserun-core/edit/main/{path}"
+default-theme = "light"
+preferred-dark-theme = "navy"
+no-section-label = true

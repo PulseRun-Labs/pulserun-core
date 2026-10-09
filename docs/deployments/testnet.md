@@ -1,7 +1,8 @@
 # Testnet deployment
 
 > **Status: deployed and verified on Stellar testnet.** The IDs below come from a
-> real deploy via [`scripts/deploy-testnet.sh`](../../scripts/deploy-testnet.sh)
+> real deploy via
+> [`scripts/deploy-testnet.sh`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/scripts/deploy-testnet.sh)
 > and are reproducible from `main`. `MockToken` is test-only — never deploy it as
 > real money.
 

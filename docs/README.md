@@ -32,7 +32,7 @@ and per-run settlement is only economically sensible because Stellar settles
 cheaply and quickly. Authorization comes from **`Address::require_auth`** on the
 requester and runner, and the dispute window and job timeout are measured against
 the **ledger timestamp**. Remove any of those and the design does not exist. More
-detail in the [repository README](../README.md#built-on-stellar--soroban).
+detail in the [repository README](https://github.com/PulseRun-Labs/pulserun-core#built-on-stellar--soroban).
 
 ## How it works
 

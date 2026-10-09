@@ -8,8 +8,8 @@ alongside the [contract reference](contract-reference.md).
 
 | Contract | Path | Single responsibility |
 | --- | --- | --- |
-| `PulseEscrow` | [`contracts/escrow`](../contracts/escrow) | Custody requester collateral and settle jobs: create, prove, claim, dispute, refund. |
-| `MockToken` | [`contracts/mock_token`](../contracts/mock_token) | A test-only SEP-41-style token to exercise settlement. Never deployed as money. |
+| `PulseEscrow` | [`contracts/escrow`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/escrow) | Custody requester collateral and settle jobs: create, prove, claim, dispute, refund. |
+| `MockToken` | [`contracts/mock_token`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/mock_token) | A test-only SEP-41-style token to exercise settlement. Never deployed as money. |
 
 Each contract owns exactly one concern. `PulseEscrow` is the only contract that
 holds value; `MockToken` exists purely so the escrow's token transfers run in
@@ -45,7 +45,9 @@ upgraded independently of the token.
 
 ## Storage layout
 
-Keys are defined once in [`storage.rs`](../contracts/escrow/src/storage.rs) as
+Keys are defined once in
+[`storage.rs`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/contracts/escrow/src/storage.rs)
+as
 `DataKey`. The split is deliberate: contract-wide config is cheap to read and
 belongs in instance storage; per-job records go to persistent storage so a large
 backlog does not bloat the instance footprint.
@@ -69,7 +71,7 @@ mid-flight:
 Instance (config) storage lives with the contract instance and is bumped by the
 host. A `DataKey` or struct change on a live deployment needs an explicit
 migration note — see the planned threat-model/migration issue in
-[`SUBMISSION.md`](../SUBMISSION.md).
+[`SUBMISSION.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/SUBMISSION.md).
 
 ## Authorization per entrypoint
 
@@ -97,7 +99,7 @@ still claimable and double-settle it.
 The contracts currently emit **no** `contractevent`s. Indexers reconcile state by
 polling views (`get_job`, `job_count`). Emitting events on each lifecycle
 transition is planned work, tracked as an issue in
-[`SUBMISSION.md`](../SUBMISSION.md).
+[`SUBMISSION.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/SUBMISSION.md).
 
 ## Arithmetic and invariants
 

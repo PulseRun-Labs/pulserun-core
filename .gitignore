@@ -24,3 +24,6 @@ stellar/
 .env
 .env.*
 !.env.example
+
+# mdBook build output
+book/
