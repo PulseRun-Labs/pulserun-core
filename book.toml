@@ -4,7 +4,6 @@ authors = ["PulseRun Labs"]
 description = "On-chain escrow and settlement for PulseRun, a pay-per-run compute and CI runner protocol on Stellar."
 src = "docs"
 language = "en"
-multilingual = false
 
 # `mdbook build` writes the rendered site here; `book/` is git-ignored.
 [build]
