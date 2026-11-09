@@ -1,13 +1,13 @@
 ---
-name: "Task · Medium (150 pts)"
+name: "Task · Medium"
 about: Focused feature task — a new entrypoint, a storage/type change, or a test suite.
 title: "[medium] "
-labels: ["backlog", "medium", "150pts"]
+labels: ["backlog", "medium"]
 assignees: ""
 ---
 
 <!--
-Medium · 150 points
+Medium
 Scope: a new entrypoint, a storage/type change, or a multi-case test suite.
 Expected to touch a small set of files and require new tests.
 -->
@@ -28,7 +28,7 @@ tests that must pass. Example:
 - [ ] `foo(...) -> Result<T, Error>` added and exported from `lib.rs`
 - [ ] New `Error` variant (appended, never renumbered) documented in `errors.rs`
 - [ ] Happy path + failure path covered in `test.rs`
-- [ ] `cargo test --all` and clippy are clean
+- [ ] `cargo test --all --locked` and clippy are clean
 -->
 
 - [ ]
@@ -56,10 +56,6 @@ compatibility impact on existing clients.
 
 - No changes to unrelated modules or existing error code numbering.
 - Reuse `storage.rs` accessors; do not reach into `env.storage()` directly.
-
-## Points
-
-**150 pts** · Effort: medium
 
 ## Useful context
 

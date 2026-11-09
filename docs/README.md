@@ -46,21 +46,26 @@ detail in the [repository README](https://github.com/PulseRun-Labs/pulserun-core
    `rate_per_second * duration_secs`, caps it at `max_budget`, pays the runner,
    and refunds the unspent remainder to the requester.
 4. If the requester challenges inside the window, `dispute_job` freezes the
-   payout pending resolution. If the runner never submits a proof,
-   `cancel_unclaimed_job` refunds the requester in full after `max_duration_secs`.
+   payout. The configured admin then calls `resolve_dispute` to split the escrow
+   between the runner and the requester; the job becomes `Resolved`. If the
+   runner never submits a proof, `cancel_unclaimed_job` refunds the requester in
+   full after `max_duration_secs`.
+5. Every transition emits a typed contract event, so indexers can follow a job
+   from `create_job` to settlement without polling.
 
 Settlement only ever moves money already held by the contract, so it cannot fail
-for lack of funds.
+for lack of funds. The admin resolution path is a deliberate trust boundary,
+documented in the [threat model](threat-model.md).
 
 ## Where to next
 
 - [Protocol mechanics](protocol-mechanics.md) — lifecycle, state machine, and
   settlement math with worked numbers.
 - [Smart contract reference](contract-reference.md) — every function, parameter,
-  and error code.
-- [Protocol mechanics](protocol-mechanics.md) and the per-persona guides:
-  [for requesters](user-guides/requester.md) and
+  event, and error code.
+- Per-persona guides: [for requesters](user-guides/requester.md) and
   [for runners](user-guides/runner.md).
+- [Threat model](threat-model.md) — actors, trust boundaries, and mitigations.
 - [Developer guide](developer-guide.md) — local setup, build, test, deploy.
 
 Repository: [PulseRun-Labs/pulserun-core](https://github.com/PulseRun-Labs/pulserun-core).

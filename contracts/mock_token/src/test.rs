@@ -76,3 +76,37 @@ fn burn_reduces_balance() {
     client.burn(&alice, &40);
     assert_eq!(client.balance(&alice), 60);
 }
+
+#[test]
+fn burn_rejects_insufficient_balance() {
+    let env = Env::default();
+    let (client, alice, _bob) = setup(&env);
+
+    client.mint(&alice, &10);
+    assert_eq!(
+        client.try_burn(&alice, &11),
+        Err(Ok(TokenError::InsufficientBalance))
+    );
+}
+
+#[test]
+fn self_transfer_preserves_balance() {
+    let env = Env::default();
+    let (client, alice, _bob) = setup(&env);
+
+    client.mint(&alice, &100);
+    client.transfer(&alice, &alice, &40);
+    assert_eq!(client.balance(&alice), 100);
+}
+
+#[test]
+fn mint_rejects_balance_overflow() {
+    let env = Env::default();
+    let (client, alice, _bob) = setup(&env);
+
+    client.mint(&alice, &i128::MAX);
+    assert_eq!(
+        client.try_mint(&alice, &1),
+        Err(Ok(TokenError::MathOverflow))
+    );
+}

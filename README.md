@@ -111,9 +111,6 @@ point.
   </tr>
 </table>
 
-<!-- TODO: replace PLACEHOLDER_TELEGRAM with the maintainer's real handle, and
-     add teammates as extra <td> cells if there are more maintainers. -->
-
 ## Architecture
 
 ```text
@@ -139,9 +136,10 @@ stateDiagram-v2
     Queued --> Refunded: cancel_unclaimed_job\n(after max_duration_secs)
     Completed --> Settled: claim_payout\n(after dispute window)
     Completed --> Disputed: dispute_job\n(within dispute window)
+    Disputed --> Resolved: resolve_dispute\n(admin)
     Settled --> [*]
     Refunded --> [*]
-    Disputed --> [*]
+    Resolved --> [*]
 ```
 
 ### Settlement math
@@ -157,6 +155,33 @@ self-contained: it only ever moves money already in the contract, so it cannot
 fail for lack of funds. Full mechanics:
 [`docs/protocol-mechanics.md`](docs/protocol-mechanics.md).
 
+### Dispute resolution
+
+`dispute_job` freezes a payout, but a freeze is not an outcome. The configured
+admin resolves a `Disputed` job with `resolve_dispute(admin, job_id, runner_award)`,
+where `runner_award` is bounded by `0..=max_budget`; the runner receives that
+amount and the requester receives the remainder. The job becomes `Resolved` and
+cannot be claimed or resolved again. This is a deliberate, documented trust
+assumption: the admin decides the split, so deployments should use a
+multisignature or governed admin account. See
+[`docs/threat-model.md`](docs/threat-model.md).
+
+### Events
+
+Every lifecycle transition emits a typed `contractevent`, so an indexer can
+follow jobs from the ledger without polling views:
+
+| Event | Emitted by | Key fields |
+| --- | --- | --- |
+| `EscrowInitialized` | `init` | admin, dispute window |
+| `JobCreated` | `create_job` | job id, requester, runner, token, budget, rate, duration, dispute window |
+| `ProofSubmitted` | `submit_proof` | job id, runner, duration, exit code, output hash |
+| `PayoutClaimed` | `claim_payout` | job id, requester, runner, earnings, refund |
+| `JobDisputed` | `dispute_job` | job id, requester |
+| `JobRefunded` | `cancel_unclaimed_job` | job id, requester, amount |
+| `DisputeResolved` | `resolve_dispute` | job id, admin, runner award, requester refund |
+| `DisputeWindowUpdated` | `update_dispute_window` | admin, new window |
+
 ## Repository layout
 
 ```text
@@ -166,6 +191,7 @@ pulserun-core/
 │   │   └── src/
 │   │       ├── lib.rs       # entrypoints
 │   │       ├── types.rs     # ComputeJob, ExecutionProof, JobStatus
+│   │       ├── events.rs    # typed lifecycle events
 │   │       ├── storage.rs   # keys, TTL policy, accessors
 │   │       ├── errors.rs    # stable error codes
 │   │       └── test.rs      # integration-style unit tests
@@ -187,8 +213,10 @@ pulserun-core/
 | `submit_proof(runner, proof)` | runner | Records the proof, locks the output hash, opens the dispute window. |
 | `claim_payout(job_id) -> i128` | anyone | After the window: pays the runner, refunds dust to the requester. |
 | `dispute_job(requester, job_id)` | requester | Within the window: halts automatic payout. |
+| `resolve_dispute(admin, job_id, runner_award)` | admin | Splits a `Disputed` escrow and marks it `Resolved`. |
 | `cancel_unclaimed_job(requester, job_id)` | requester | After `max_duration_secs`: refunds a still-`Queued` job in full. |
-| `get_job` / `get_proof` / `job_count` / `dispute_window` / `admin` | view | Read-only accessors. |
+| `update_dispute_window(admin, dispute_window_secs)` | admin | Changes the window for jobs created after the call. |
+| `get_job` / `get_proof` / `job_count` / `dispute_window` / `admin` / `get_config` | view | Read-only accessors. |
 
 Full reference including error codes:
 [`docs/contract-reference.md`](docs/contract-reference.md).
@@ -203,16 +231,16 @@ network services.
 rustup target add wasm32v1-none
 rustup component add rustfmt clippy
 
-# 2. Run the full test suite (27 tests, including token settlement).
-cargo test --all
+# 2. Run the full test suite (48 tests: 39 escrow + 9 token).
+cargo test --all --locked
 
 # 3. Match CI exactly.
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
+cargo clippy --locked --all-targets -- -D warnings
 
 # 4. Compile the deployable contracts.
 SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 \
-  cargo build --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+  cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
 ```
 
 Artifacts land in `target/wasm32v1-none/release/{pulserun_escrow,mock_token}.wasm`.
@@ -246,6 +274,11 @@ copy-pasteable contract ids. See
   the release profile keeps `overflow-checks = true`.
 - **Bounded liability** — payout can never exceed the locked `max_budget`, and
   billable time can never exceed `max_duration_secs`.
+- **Funds cannot be frozen forever** — a disputed job has an on-chain resolution
+  path via the configured admin, with the award bounded by the escrow balance.
+- **Configuration cannot silently expire** — every state-changing entrypoint
+  extends the contract instance TTL, so `Admin`, `DisputeWindow`, and `JobCount`
+  stay live while the escrow is in use.
 
 This code is **unaudited**. Treat it as a reference implementation and get an
 independent review before mainnet use. See [`SECURITY.md`](SECURITY.md) to

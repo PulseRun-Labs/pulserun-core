@@ -6,6 +6,8 @@ network service, and no required Stellar CLI for building or testing.
 ## Prerequisites
 
 - Rust **1.84+** (`rustup`). The `wasm32v1-none` target needs a recent stable.
+  [`rust-toolchain.toml`](../rust-toolchain.toml) pins the channel and installs
+  the required components and target automatically.
 - Components: `rustfmt`, `clippy`.
 - Optional: the [Stellar CLI](https://github.com/stellar/stellar-cli) for
   testnet deployment and canonical builds.
@@ -18,16 +20,16 @@ rustup component add rustfmt clippy
 ## Local build and test
 
 ```bash
-# Full test suite (27 tests: 21 escrow + 6 token).
-cargo test --all
+# Full test suite (48 tests: 39 escrow + 9 token).
+cargo test --all --locked
 
 # Match CI exactly.
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
+cargo clippy --locked --all-targets -- -D warnings
 
 # Compile deployable wasm.
 SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 \
-  cargo build --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+  cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
 ```
 
 Artifacts land in
@@ -91,8 +93,10 @@ const tx = new TransactionBuilder(account, {
   .build();
 ```
 
-Read functions (`get_job`, `get_proof`, `job_count`, `dispute_window`, `admin`)
-are invoked the same way and simulated without signing.
+Read functions (`get_job`, `get_proof`, `job_count`, `dispute_window`, `admin`,
+`get_config`) are invoked the same way and simulated without signing. Lifecycle
+events can be read from transaction metadata or an indexer; the typed event
+structs live in `contracts/escrow/src/events.rs`.
 
 ## Deploying to testnet
 

@@ -21,7 +21,6 @@
 
 - [Testnet](deployments/testnet.md)
 
-## For agents
+## Security
 
-- [Contract system prompt](contract-system-prompt.md)
-- [Application system prompt](app-system-prompt.md)
+- [Threat model](threat-model.md)

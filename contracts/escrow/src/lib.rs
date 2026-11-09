@@ -22,6 +22,7 @@
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, Env};
 
 mod errors;
+mod events;
 mod storage;
 mod types;
 
@@ -29,6 +30,10 @@ mod types;
 mod test;
 
 pub use crate::errors::Error;
+pub use crate::events::{
+    DisputeResolved, DisputeWindowUpdated, EscrowInitialized, JobCreated, JobDisputed, JobRefunded,
+    PayoutClaimed, ProofSubmitted,
+};
 pub use crate::types::{ComputeJob, ExecutionProof, JobStatus};
 
 /// The PulseRun escrow contract.
@@ -48,9 +53,19 @@ impl PulseEscrow {
         if storage::has_admin(&env) {
             return Err(Error::AlreadyInitialized);
         }
+        if dispute_window_secs == 0 {
+            return Err(Error::InvalidDisputeWindow);
+        }
 
         storage::set_admin(&env, &admin);
         storage::set_dispute_window(&env, dispute_window_secs);
+        storage::extend_instance_ttl(&env);
+
+        EscrowInitialized {
+            admin,
+            dispute_window_secs,
+        }
+        .publish(&env);
         Ok(())
     }
 
@@ -70,6 +85,7 @@ impl PulseEscrow {
     ) -> Result<u64, Error> {
         storage::require_initialized(&env)?;
         requester.require_auth();
+        storage::extend_instance_ttl(&env);
 
         if max_budget <= 0 {
             return Err(Error::InvalidBudget);
@@ -89,7 +105,7 @@ impl PulseEscrow {
             &max_budget,
         );
 
-        let job_id = storage::next_job_id(&env);
+        let job_id = storage::next_job_id(&env)?;
         let job = ComputeJob {
             job_id,
             requester,
@@ -98,12 +114,25 @@ impl PulseEscrow {
             max_budget,
             rate_per_second,
             max_duration_secs,
+            dispute_window_secs: storage::get_dispute_window(&env),
             status: JobStatus::Queued,
             created_at: env.ledger().timestamp(),
             completed_at: 0,
             output_hash: BytesN::from_array(&env, &[0u8; 32]),
         };
         storage::set_job(&env, &job);
+
+        JobCreated {
+            job_id,
+            requester: job.requester,
+            runner: job.runner,
+            payment_token: job.payment_token,
+            max_budget: job.max_budget,
+            rate_per_second: job.rate_per_second,
+            max_duration_secs: job.max_duration_secs,
+            dispute_window_secs: job.dispute_window_secs,
+        }
+        .publish(&env);
 
         Ok(job_id)
     }
@@ -115,6 +144,7 @@ impl PulseEscrow {
     /// in and the dispute clock starts.
     pub fn submit_proof(env: Env, runner: Address, proof: ExecutionProof) -> Result<(), Error> {
         storage::require_initialized(&env)?;
+        storage::extend_instance_ttl(&env);
 
         let mut job = storage::get_job(&env, proof.job_id).ok_or(Error::JobNotFound)?;
 
@@ -140,6 +170,15 @@ impl PulseEscrow {
         storage::set_job(&env, &job);
         storage::set_proof(&env, &proof);
 
+        ProofSubmitted {
+            job_id: proof.job_id,
+            runner: job.runner,
+            duration_secs: proof.duration_secs,
+            exit_code: proof.exit_code,
+            output_hash: proof.output_hash,
+        }
+        .publish(&env);
+
         Ok(())
     }
 
@@ -150,6 +189,7 @@ impl PulseEscrow {
     /// to the requester, and marks the job `Settled`. Returns the payout.
     pub fn claim_payout(env: Env, job_id: u64) -> Result<i128, Error> {
         storage::require_initialized(&env)?;
+        storage::extend_instance_ttl(&env);
 
         let mut job = storage::get_job(&env, job_id).ok_or(Error::JobNotFound)?;
         if job.status != JobStatus::Completed {
@@ -160,7 +200,7 @@ impl PulseEscrow {
 
         let release_at = job
             .completed_at
-            .checked_add(storage::get_dispute_window(&env))
+            .checked_add(job.dispute_window_secs)
             .ok_or(Error::MathOverflow)?;
         if env.ledger().timestamp() < release_at {
             return Err(Error::DisputeWindowActive);
@@ -183,6 +223,15 @@ impl PulseEscrow {
             token.transfer(&contract, &job.requester, &refund);
         }
 
+        PayoutClaimed {
+            job_id,
+            requester: job.requester,
+            runner: job.runner,
+            earnings,
+            refund,
+        }
+        .publish(&env);
+
         Ok(earnings)
     }
 
@@ -190,10 +239,11 @@ impl PulseEscrow {
     ///
     /// Only the requester may dispute, and only before
     /// `completed_at + dispute_window_secs` passes. On success the job moves to
-    /// `Disputed` and `claim_payout` will refuse it, halting automatic payout
-    /// pending off-chain resolution.
+    /// `Disputed` and `claim_payout` will refuse it. The admin resolves the
+    /// split with [`PulseEscrow::resolve_dispute`].
     pub fn dispute_job(env: Env, requester: Address, job_id: u64) -> Result<(), Error> {
         storage::require_initialized(&env)?;
+        storage::extend_instance_ttl(&env);
 
         let mut job = storage::get_job(&env, job_id).ok_or(Error::JobNotFound)?;
         if job.status != JobStatus::Completed {
@@ -206,7 +256,7 @@ impl PulseEscrow {
 
         let deadline = job
             .completed_at
-            .checked_add(storage::get_dispute_window(&env))
+            .checked_add(job.dispute_window_secs)
             .ok_or(Error::MathOverflow)?;
         if env.ledger().timestamp() >= deadline {
             return Err(Error::DisputeWindowElapsed);
@@ -214,6 +264,8 @@ impl PulseEscrow {
 
         job.status = JobStatus::Disputed;
         storage::set_job(&env, &job);
+
+        JobDisputed { job_id, requester }.publish(&env);
         Ok(())
     }
 
@@ -225,6 +277,7 @@ impl PulseEscrow {
     /// `max_budget` is returned and the job is marked `Refunded`.
     pub fn cancel_unclaimed_job(env: Env, requester: Address, job_id: u64) -> Result<(), Error> {
         storage::require_initialized(&env)?;
+        storage::extend_instance_ttl(&env);
 
         let mut job = storage::get_job(&env, job_id).ok_or(Error::JobNotFound)?;
         if job.status != JobStatus::Queued {
@@ -251,6 +304,102 @@ impl PulseEscrow {
             &job.requester,
             &job.max_budget,
         );
+
+        JobRefunded {
+            job_id,
+            requester: job.requester,
+            amount: job.max_budget,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Resolves a `Disputed` job, splitting the escrow between the runner and
+    /// the requester.
+    ///
+    /// Only the configured admin may resolve a dispute. `runner_award` is in
+    /// token base units and must be within `0..=max_budget`; the remainder is
+    /// refunded to the requester. The job becomes `Resolved`, which is terminal,
+    /// so `claim_payout` can no longer settle it.
+    pub fn resolve_dispute(
+        env: Env,
+        admin: Address,
+        job_id: u64,
+        runner_award: i128,
+    ) -> Result<(), Error> {
+        storage::require_initialized(&env)?;
+        storage::extend_instance_ttl(&env);
+
+        let mut job = storage::get_job(&env, job_id).ok_or(Error::JobNotFound)?;
+        if job.status != JobStatus::Disputed {
+            return Err(Error::InvalidStatus);
+        }
+        if admin != storage::get_admin(&env) {
+            return Err(Error::Unauthorized);
+        }
+        admin.require_auth();
+
+        if runner_award < 0 || runner_award > job.max_budget {
+            return Err(Error::InvalidShare);
+        }
+        let refund = job.max_budget - runner_award;
+
+        // Mark the job resolved before moving funds so a re-entrant token cannot
+        // settle the same dispute twice.
+        job.status = JobStatus::Resolved;
+        storage::set_job(&env, &job);
+
+        let token = TokenClient::new(&env, &job.payment_token);
+        let contract = env.current_contract_address();
+        if runner_award > 0 {
+            token.transfer(&contract, &job.runner, &runner_award);
+        }
+        if refund > 0 {
+            token.transfer(&contract, &job.requester, &refund);
+        }
+
+        DisputeResolved {
+            job_id,
+            admin,
+            runner_award,
+            requester_refund: refund,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Updates the dispute window for jobs created after this call.
+    ///
+    /// Only the configured admin may call this, and the window must be strictly
+    /// positive. Each job captures the window at `create_job`, so changing the
+    /// global value cannot shorten or extend the terms of a job already in
+    /// flight.
+    pub fn update_dispute_window(
+        env: Env,
+        admin: Address,
+        dispute_window_secs: u64,
+    ) -> Result<(), Error> {
+        storage::require_initialized(&env)?;
+        storage::extend_instance_ttl(&env);
+
+        if admin != storage::get_admin(&env) {
+            return Err(Error::Unauthorized);
+        }
+        admin.require_auth();
+
+        if dispute_window_secs == 0 {
+            return Err(Error::InvalidDisputeWindow);
+        }
+
+        storage::set_dispute_window(&env, dispute_window_secs);
+
+        DisputeWindowUpdated {
+            admin,
+            dispute_window_secs,
+        }
+        .publish(&env);
 
         Ok(())
     }
@@ -282,6 +431,16 @@ impl PulseEscrow {
     /// Configured administrator.
     pub fn admin(env: Env) -> Address {
         storage::get_admin(&env)
+    }
+
+    /// Returns `(admin, dispute_window_secs, job_count)` in one call.
+    pub fn get_config(env: Env) -> Result<(Address, u64, u64), Error> {
+        storage::require_initialized(&env)?;
+        Ok((
+            storage::get_admin(&env),
+            storage::get_dispute_window(&env),
+            storage::job_count(&env),
+        ))
     }
 }
 

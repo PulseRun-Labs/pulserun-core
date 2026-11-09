@@ -7,8 +7,10 @@ use soroban_sdk::{contracttype, Address, BytesN};
 ///  (none) ──────────────► Queued ──────────────► Completed
 ///                           │                        │
 ///                           │ cancel_unclaimed_job   ├── claim_payout ──► Settled
-///                           ▼ (after max_duration)   │
+///                           ▼ (after max_duration)   │   (after window)
 ///                        Refunded                    └── dispute_job ──► Disputed
+///                                                                          │
+///                                                          resolve_dispute ─┴──► Resolved
 /// ```
 #[contracttype]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -23,12 +25,17 @@ pub enum JobStatus {
     Settled,
     /// The job never completed in time and the requester was made whole.
     Refunded,
+    /// A disputed job was resolved by the administrator; the escrow drained.
+    Resolved,
 }
 
 impl JobStatus {
     /// Returns `true` once the job reached a terminal state.
     pub fn is_terminal(&self) -> bool {
-        matches!(self, JobStatus::Settled | JobStatus::Refunded)
+        matches!(
+            self,
+            JobStatus::Settled | JobStatus::Refunded | JobStatus::Resolved
+        )
     }
 }
 
@@ -50,6 +57,8 @@ pub struct ComputeJob {
     pub rate_per_second: i128,
     /// Upper bound on billable seconds; also the unclaimed-job timeout.
     pub max_duration_secs: u64,
+    /// Dispute window captured when the job was created, in seconds.
+    pub dispute_window_secs: u64,
     /// Current lifecycle state.
     pub status: JobStatus,
     /// Ledger timestamp at which the escrow was opened.

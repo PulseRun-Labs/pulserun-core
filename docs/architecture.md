@@ -57,7 +57,7 @@ backlog does not bloat the instance footprint.
 | `Admin` | instance | `Address` | `init` |
 | `DisputeWindow` | instance | `u64` | `init` |
 | `JobCount` | instance | `u64` | `create_job` (monotonic id allocation) |
-| `Job(u64)` | persistent | `ComputeJob` | `create_job`, `submit_proof`, `claim_payout`, `dispute_job`, `cancel_unclaimed_job` |
+| `Job(u64)` | persistent | `ComputeJob` | `create_job`, `submit_proof`, `claim_payout`, `dispute_job`, `resolve_dispute`, `cancel_unclaimed_job` |
 | `Proof(u64)` | persistent | `ExecutionProof` | `submit_proof` |
 
 ### TTL policy
@@ -68,10 +68,17 @@ mid-flight:
 - `TTL_THRESHOLD = 17_280` ledgers (~1 day at 5s/ledger) — bump threshold.
 - `TTL_EXTEND_TO = 518_400` ledgers (~30 days at 5s/ledger) — new TTL.
 
-Instance (config) storage lives with the contract instance and is bumped by the
-host. A `DataKey` or struct change on a live deployment needs an explicit
-migration note — see the planned threat-model/migration issue in
-[`SUBMISSION.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/SUBMISSION.md).
+Each job snapshots `DisputeWindow` into its own `dispute_window_secs` field at
+`create_job`, so an admin update applies only to future jobs and cannot rewrite
+the terms of a job already in flight.
+
+Instance (config) storage is **not** extended by the host automatically. Every
+state-changing entrypoint calls `storage::extend_instance_ttl`, which applies the
+same threshold/extend-to policy to the instance entry. Without that call the
+admin, dispute window, and job counter would expire after the TTL and the
+contract would become unusable. A `DataKey` or struct change on a live
+deployment needs an explicit migration note — see
+[`threat-model.md`](threat-model.md#storage-and-ttl).
 
 ## Authorization per entrypoint
 
@@ -86,26 +93,43 @@ someone else's signature.
 | `submit_proof` | `runner` (arg) | `job.runner` |
 | `claim_payout` | none | payout destinations are fixed by the stored job |
 | `dispute_job` | `requester` (arg) | `job.requester` |
+| `resolve_dispute` | `admin` (arg) | stored `Admin` |
 | `cancel_unclaimed_job` | `requester` (arg) | `job.requester` |
+| `update_dispute_window` | `admin` (arg) | stored `Admin` |
 
 ## Effects before interactions
 
-`claim_payout` writes `Settled` and `cancel_unclaimed_job` writes `Refunded`
-*before* any token transfer. A re-entrant token therefore cannot observe a job as
-still claimable and double-settle it.
+`claim_payout` writes `Settled`, `cancel_unclaimed_job` writes `Refunded`, and
+`resolve_dispute` writes `Resolved` *before* any token transfer. A re-entrant
+token therefore cannot observe a job as still claimable and double-settle it.
 
 ## Events
 
-The contracts currently emit **no** `contractevent`s. Indexers reconcile state by
-polling views (`get_job`, `job_count`). Emitting events on each lifecycle
-transition is planned work, tracked as an issue in
-[`SUBMISSION.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/SUBMISSION.md).
+Every lifecycle transition publishes a typed `#[contractevent]` defined in
+the [`events`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/contracts/escrow/src/events.rs)
+module:
+
+| Event | Published by |
+| --- | --- |
+| `EscrowInitialized` | `init` |
+| `JobCreated` | `create_job` |
+| `ProofSubmitted` | `submit_proof` |
+| `PayoutClaimed` | `claim_payout` |
+| `JobDisputed` | `dispute_job` |
+| `JobRefunded` | `cancel_unclaimed_job` |
+| `DisputeResolved` | `resolve_dispute` |
+| `DisputeWindowUpdated` | `update_dispute_window` |
+
+The event structs are part of the contract spec, so generated clients can decode
+them without a hand-maintained schema.
 
 ## Arithmetic and invariants
 
 - Amounts are `i128` base units; no floats anywhere.
 - `metered = rate_per_second * duration_secs` uses `checked_mul` → `MathOverflow`.
 - `earnings = min(metered, max_budget)`, `refund = max_budget - earnings`.
+- `runner_award` on dispute resolution is bounded by `0..=max_budget`.
+- Job id allocation uses `checked_add` → `MathOverflow`.
 - Timeouts/windows use `checked_add` on `created_at`/`completed_at`.
 
 Invariants held at every settlement:
@@ -113,3 +137,5 @@ Invariants held at every settlement:
 1. `earnings + refund == max_budget` (the escrow drains exactly).
 2. `earnings <= max_budget`.
 3. `duration_secs <= max_duration_secs`, enforced before the proof is stored.
+4. `runner_award + requester_refund == max_budget` on dispute resolution, with
+   `runner_award` in `0..=max_budget`.

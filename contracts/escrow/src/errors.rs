@@ -36,4 +36,8 @@ pub enum Error {
     JobNotExpired = 13,
     /// A settlement computation overflowed `i128`.
     MathOverflow = 14,
+    /// A dispute resolution share is outside `0..=max_budget`.
+    InvalidShare = 15,
+    /// The dispute window must be strictly positive.
+    InvalidDisputeWindow = 16,
 }

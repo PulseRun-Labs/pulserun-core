@@ -38,10 +38,14 @@ starts — the **dispute window** — before any payment can move.
   comes straight back to you.
 - **If you disagree** — the seconds look inflated, or the output is wrong —
   call `dispute_job` before the window closes. This **freezes the payment**.
-  Nothing is paid to anyone while the job is disputed.
+  Nothing is paid to anyone while the job is disputed. The configured admin then
+  calls `resolve_dispute` to award the runner between `0` and `max_budget` and
+  refund you the rest; the job becomes `Resolved`.
 
-You must call `dispute_job` before `completed_at + dispute_window_secs`. After
-that, payment is automatic and cannot be stopped by you.
+You must call `dispute_job` before `completed_at + dispute_window_secs`. The
+window is captured when you create the job, so later admin changes cannot
+rewrite your terms. After the window closes, payment is automatic and cannot be
+stopped by you.
 
 ## What you are guaranteed
 
@@ -49,10 +53,14 @@ that, payment is automatic and cannot be stopped by you.
 2. A runner cannot bill more seconds than `max_duration_secs`.
 3. A job that never runs is refunded in full.
 4. You can freeze any payment you believe is wrong, inside the window.
+5. A frozen payment has an on-chain resolution path; a disputed job cannot stay
+   locked with no outcome.
 
 ## What you are not guaranteed
 
-This contract does not judge whether the work was correct. `dispute_job` stops
-the money; it does not decide the outcome. Resolving a disputed job — who gets
-what — is handled off-chain, and an on-chain admin resolution path is planned
-work. Treat the dispute window as a brake, not a court.
+The contract does not inspect your logs or judge whether the work was correct.
+`dispute_job` stops the money; the configured admin decides the split with
+`resolve_dispute`, subject to the hard `max_budget` bound. That means the admin
+is a trust assumption: before using a deployment, check who controls the admin
+key (a multisignature or governed account is appropriate for real value). Treat
+the dispute window as a brake, not an automatic court.

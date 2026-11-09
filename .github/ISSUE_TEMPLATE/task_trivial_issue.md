@@ -1,13 +1,13 @@
 ---
-name: "Task · Trivial (100 pts)"
+name: "Task · Trivial"
 about: Small, isolated task — docs, a tiny fix, or a one-file change.
 title: "[trivial] "
-labels: ["backlog", "trivial", "100pts"]
+labels: ["backlog", "trivial"]
 assignees: ""
 ---
 
 <!--
-Trivial · 100 points
+Trivial
 Scope: docs, tiny fixes, isolated helper or view functions, one-file changes.
 Keep the diff small; if it grows, the task is probably medium.
 -->
@@ -27,7 +27,7 @@ Checklist of concrete, verifiable outcomes. Include the exact artifacts to
 change and the test that must pass. Example:
 - [ ] `view` entrypoint added to `contracts/escrow/src/lib.rs`
 - [ ] Covered by a test in `contracts/escrow/src/test.rs`
-- [ ] `cargo clippy --all-targets -- -D warnings` is clean
+- [ ] `cargo clippy --locked --all-targets -- -D warnings` is clean
 -->
 
 - [ ]
@@ -39,10 +39,6 @@ change and the test that must pass. Example:
 - Touches at most one contract module.
 - No changes to the public error codes or storage layout.
 - No new dependencies.
-
-## Points
-
-**100 pts** · Effort: trivial
 
 ## Useful context
 

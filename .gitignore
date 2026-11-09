@@ -1,7 +1,6 @@
 # Rust / Cargo build artifacts
 target/
 **/*.rs.bk
-Cargo.lock
 
 # Soroban test snapshots
 test_snapshots/

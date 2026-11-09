@@ -33,7 +33,9 @@ Call `submit_proof` with an `ExecutionProof`:
 - `output_hash` — a 32-byte commitment to the output. Compute it over the logs,
   artifacts, or build cache you produced. This is what the requester checks.
 
-Once the proof lands, the job is `Completed` and the dispute window opens.
+Once the proof lands, the job is `Completed` and the dispute window opens. The
+window was captured when the job was created, so it cannot be shortened or
+lengthened afterwards.
 
 ## Getting paid
 
@@ -52,13 +54,15 @@ charge. There is no bonus for finishing early.
 
 The requester can call `dispute_job` inside the window. If they do, payment is
 frozen and `claim_payout` will refuse the job. Funds stay in escrow until the
-dispute is resolved. You cannot force a payout through a dispute — that is the
-point of the window, and it is why you should confirm the job terms before you
-run.
+configured admin calls `resolve_dispute`, which awards you an amount between `0`
+and `max_budget` and refunds the rest to the requester. The award is a trust
+decision by the admin, not a contract-computed result, so confirm the job terms
+before you run and keep the evidence behind your `output_hash`.
 
 ## Honest metering is enforced by bounds, not by the contract
 
 The contract enforces that you cannot bill past `max_duration_secs` or
 `max_budget`. It cannot verify that `duration_secs` matches your real runtime.
 That check is the requester's, via the output hash and the dispute window. Report
-accurate seconds; a disputed proof delays your money indefinitely.
+accurate seconds; a disputed proof delays your money until the admin resolves
+the split.

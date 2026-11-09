@@ -1,13 +1,13 @@
 ---
-name: "Task · High (200 pts)"
+name: "Task · High"
 about: Cross-cutting design task — new settlement flows, security hardening, or ABI evolution.
 title: "[high] "
-labels: ["backlog", "high", "200pts"]
+labels: ["backlog", "high"]
 assignees: ""
 ---
 
 <!--
-High · 200 points
+High
 Scope: cross-cutting design work — new settlement flows, security hardening,
 gas/resource optimization, or ABI evolution. Expect a design note in the PR.
 -->
@@ -65,10 +65,6 @@ ABI impact, migration path for live escrows, and why alternatives were rejected.
 
 - May touch multiple modules, but must not change existing error codes.
 - Any storage-layout change needs an explicit migration note.
-
-## Points
-
-**200 pts** · Effort: high
 
 ## Useful context
 

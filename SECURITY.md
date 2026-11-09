@@ -64,6 +64,7 @@ degrade services you do not operate.
 
 ## Related documentation
 
+- [Threat model](docs/threat-model.md)
 - [Security model](README.md#security-model)
 - [Protocol mechanics](docs/protocol-mechanics.md)
 - [Contributing](CONTRIBUTING.md)

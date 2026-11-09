@@ -14,9 +14,10 @@ reviewers use it to decide what to scrutinize.
 ## Scope
 
 <!-- Delete what doesn't apply. -->
-- [ ] `trivial` — 100 pts
-- [ ] `medium` — 150 pts
-- [ ] `high` — 200 pts
+- [ ] Documentation or small fix
+- [ ] Feature or behavior change
+- [ ] Contract ABI or storage change
+- [ ] CI / tooling
 - [ ] Not applicable
 
 ## Changes
@@ -38,13 +39,13 @@ the failure/error path where relevant.
 
 <!--
 Run the full gate locally. Check off only what actually passed. Paste the
-`cargo test --all` summary line if it helps.
+`cargo test --all --locked` summary line if it helps.
 -->
 
 - [ ] `cargo fmt --all -- --check`
-- [ ] `cargo clippy --all-targets -- -D warnings`
-- [ ] `cargo test --all`
-- [ ] `SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 cargo build --target wasm32v1-none --release -p pulserun-escrow -p mock-token`
+- [ ] `cargo clippy --locked --all-targets -- -D warnings`
+- [ ] `cargo test --all --locked`
+- [ ] `SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token`
 
 ## Reviewer focus
 

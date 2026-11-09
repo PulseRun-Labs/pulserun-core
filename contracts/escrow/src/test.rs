@@ -1,11 +1,15 @@
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Events, Ledger},
     Address, BytesN, Env,
 };
 
 use mock_token::{MockToken, MockTokenClient};
 
-use crate::{Error, ExecutionProof, JobStatus, PulseEscrow, PulseEscrowClient};
+use crate::{
+    DisputeResolved, DisputeWindowUpdated, Error, EscrowInitialized, ExecutionProof, JobCreated,
+    JobDisputed, JobRefunded, JobStatus, PayoutClaimed, ProofSubmitted, PulseEscrow,
+    PulseEscrowClient,
+};
 
 const DISPUTE_WINDOW: u64 = 300;
 const FUNDING: i128 = 100_000;
@@ -68,6 +72,24 @@ fn proof(env: &Env, job_id: u64, duration_secs: u64, exit_code: i32) -> Executio
         exit_code,
         output_hash: hash(env, 7),
     }
+}
+
+/// Asserts that the last invocation emitted exactly `event` and nothing else.
+fn assert_only_event(w: &World, event: impl soroban_sdk::events::Event) {
+    assert_eq!(w.env.events().all(), [event.to_xdr(&w.env, &w.escrow_id)]);
+}
+
+/// Sum of `max_budget` across jobs that have not reached a terminal state.
+fn open_escrow_total(w: &World) -> i128 {
+    let escrow = w.escrow();
+    let mut total = 0;
+    for job_id in 1..=escrow.job_count() {
+        let job = escrow.get_job(&job_id);
+        if !job.status.is_terminal() {
+            total += job.max_budget;
+        }
+    }
+    total
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +386,7 @@ fn dispute_halts_automatic_payout() {
         Err(Ok(Error::InvalidStatus))
     );
 
-    // Funds stay escrowed pending off-chain resolution.
+    // Funds stay escrowed pending admin resolution.
     assert_eq!(token.balance(&w.escrow_id), 1_000);
     assert_eq!(token.balance(&w.runner), 0);
 }
@@ -472,4 +494,415 @@ fn unknown_job_and_proof_views_fail() {
 
     assert_eq!(escrow.try_get_job(&1), Err(Ok(Error::JobNotFound)));
     assert_eq!(escrow.try_get_proof(&1), Err(Ok(Error::ProofNotFound)));
+}
+
+#[test]
+fn get_config_returns_all_configuration_in_one_call() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+
+    assert_eq!(escrow.get_config(), (w.admin.clone(), DISPUTE_WINDOW, 1));
+}
+
+// ---------------------------------------------------------------------------
+// events
+// ---------------------------------------------------------------------------
+
+#[test]
+fn init_emits_escrow_initialized() {
+    let w = setup();
+
+    assert_only_event(
+        &w,
+        EscrowInitialized {
+            admin: w.admin.clone(),
+            dispute_window_secs: DISPUTE_WINDOW,
+        },
+    );
+}
+
+#[test]
+fn init_rejects_zero_dispute_window() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let escrow_id = env.register(PulseEscrow, ());
+    let escrow = PulseEscrowClient::new(&env, &escrow_id);
+
+    assert_eq!(
+        escrow.try_init(&admin, &0),
+        Err(Ok(Error::InvalidDisputeWindow))
+    );
+}
+
+#[test]
+fn create_job_emits_job_created() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    let job_id = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+
+    assert_only_event(
+        &w,
+        JobCreated {
+            job_id,
+            requester: w.requester.clone(),
+            runner: w.runner.clone(),
+            payment_token: w.token_id.clone(),
+            max_budget: 1_000,
+            rate_per_second: 10,
+            max_duration_secs: 100,
+            dispute_window_secs: DISPUTE_WINDOW,
+        },
+    );
+}
+
+#[test]
+fn submit_proof_emits_proof_submitted() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    let job_id = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    w.env.ledger().set_timestamp(5_000);
+    escrow.submit_proof(&w.runner, &proof(&w.env, job_id, 40, 0));
+
+    assert_only_event(
+        &w,
+        ProofSubmitted {
+            job_id,
+            runner: w.runner.clone(),
+            duration_secs: 40,
+            exit_code: 0,
+            output_hash: hash(&w.env, 7),
+        },
+    );
+}
+
+#[test]
+fn claim_payout_emits_payout_claimed() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    w.env.ledger().set_timestamp(1_000);
+    let job_id = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    w.env.ledger().set_timestamp(1_020);
+    escrow.submit_proof(&w.runner, &proof(&w.env, job_id, 20, 0));
+    w.env.ledger().set_timestamp(1_020 + DISPUTE_WINDOW);
+    escrow.claim_payout(&job_id);
+
+    assert_only_event(
+        &w,
+        PayoutClaimed {
+            job_id,
+            requester: w.requester.clone(),
+            runner: w.runner.clone(),
+            earnings: 200,
+            refund: 800,
+        },
+    );
+}
+
+#[test]
+fn dispute_job_emits_job_disputed() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    w.env.ledger().set_timestamp(1_000);
+    let job_id = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    escrow.submit_proof(&w.runner, &proof(&w.env, job_id, 20, 0));
+    w.env.ledger().set_timestamp(1_050);
+    escrow.dispute_job(&w.requester, &job_id);
+
+    assert_only_event(
+        &w,
+        JobDisputed {
+            job_id,
+            requester: w.requester.clone(),
+        },
+    );
+}
+
+#[test]
+fn cancel_unclaimed_job_emits_job_refunded() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    w.env.ledger().set_timestamp(1_000);
+    let job_id = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    w.env.ledger().set_timestamp(1_100);
+    escrow.cancel_unclaimed_job(&w.requester, &job_id);
+
+    assert_only_event(
+        &w,
+        JobRefunded {
+            job_id,
+            requester: w.requester.clone(),
+            amount: 1_000,
+        },
+    );
+}
+
+// ---------------------------------------------------------------------------
+// admin configuration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn update_dispute_window_changes_config_and_emits_event() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    escrow.update_dispute_window(&w.admin, &900);
+
+    assert_only_event(
+        &w,
+        DisputeWindowUpdated {
+            admin: w.admin.clone(),
+            dispute_window_secs: 900,
+        },
+    );
+    assert_eq!(escrow.dispute_window(), 900);
+}
+
+#[test]
+fn update_dispute_window_rejects_non_admin_and_zero() {
+    let w = setup();
+    let escrow = w.escrow();
+    let outsider = Address::generate(&w.env);
+
+    assert_eq!(
+        escrow.try_update_dispute_window(&outsider, &900),
+        Err(Ok(Error::Unauthorized))
+    );
+    assert_eq!(
+        escrow.try_update_dispute_window(&w.admin, &0),
+        Err(Ok(Error::InvalidDisputeWindow))
+    );
+    assert_eq!(escrow.dispute_window(), DISPUTE_WINDOW);
+}
+
+#[test]
+fn update_dispute_window_does_not_rewrite_jobs_in_flight() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    w.env.ledger().set_timestamp(1_000);
+    let old_job = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    escrow.update_dispute_window(&w.admin, &10);
+    let new_job = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+
+    // Each job captured the window that was live when it was created.
+    assert_eq!(escrow.get_job(&old_job).dispute_window_secs, DISPUTE_WINDOW);
+    assert_eq!(escrow.get_job(&new_job).dispute_window_secs, 10);
+
+    // The old job still gets the original 300-second window.
+    w.env.ledger().set_timestamp(1_010);
+    escrow.submit_proof(&w.runner, &proof(&w.env, old_job, 10, 0));
+    w.env.ledger().set_timestamp(1_010 + DISPUTE_WINDOW - 1);
+    assert_eq!(
+        escrow.try_claim_payout(&old_job),
+        Err(Ok(Error::DisputeWindowActive))
+    );
+    w.env.ledger().set_timestamp(1_010 + DISPUTE_WINDOW);
+    escrow.claim_payout(&old_job);
+
+    // The new job uses the shortened window.
+    w.env.ledger().set_timestamp(1_310);
+    escrow.submit_proof(&w.runner, &proof(&w.env, new_job, 10, 0));
+    w.env.ledger().set_timestamp(1_319);
+    assert_eq!(
+        escrow.try_claim_payout(&new_job),
+        Err(Ok(Error::DisputeWindowActive))
+    );
+    w.env.ledger().set_timestamp(1_320);
+    escrow.claim_payout(&new_job);
+}
+
+// ---------------------------------------------------------------------------
+// dispute resolution
+// ---------------------------------------------------------------------------
+
+/// Drives a job into `Disputed` and returns its id.
+fn disputed_job(w: &World) -> u64 {
+    let escrow = w.escrow();
+    w.env.ledger().set_timestamp(1_000);
+    let job_id = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    escrow.submit_proof(&w.runner, &proof(&w.env, job_id, 20, 0));
+    w.env.ledger().set_timestamp(1_050);
+    escrow.dispute_job(&w.requester, &job_id);
+    job_id
+}
+
+#[test]
+fn resolve_dispute_splits_escrow_and_settles() {
+    let w = setup();
+    let escrow = w.escrow();
+    let token = w.token();
+    let job_id = disputed_job(&w);
+
+    w.env.ledger().set_timestamp(1_500);
+    escrow.resolve_dispute(&w.admin, &job_id, &150);
+
+    assert_only_event(
+        &w,
+        DisputeResolved {
+            job_id,
+            admin: w.admin.clone(),
+            runner_award: 150,
+            requester_refund: 850,
+        },
+    );
+
+    assert_eq!(escrow.get_job(&job_id).status, JobStatus::Resolved);
+    assert_eq!(token.balance(&w.runner), 150);
+    assert_eq!(token.balance(&w.requester), FUNDING - 150);
+    assert_eq!(token.balance(&w.escrow_id), 0);
+
+    // A resolved dispute is terminal: automatic settlement cannot run again.
+    w.env.ledger().set_timestamp(10_000);
+    assert_eq!(
+        escrow.try_claim_payout(&job_id),
+        Err(Ok(Error::InvalidStatus))
+    );
+    assert_eq!(
+        escrow.try_resolve_dispute(&w.admin, &job_id, &0),
+        Err(Ok(Error::InvalidStatus))
+    );
+}
+
+#[test]
+fn resolve_dispute_can_refund_in_full_or_pay_in_full() {
+    let w = setup();
+    let escrow = w.escrow();
+    let token = w.token();
+
+    let refunded = disputed_job(&w);
+    escrow.resolve_dispute(&w.admin, &refunded, &0);
+    assert_eq!(token.balance(&w.requester), FUNDING);
+    assert_eq!(token.balance(&w.runner), 0);
+
+    let paid = disputed_job(&w);
+    escrow.resolve_dispute(&w.admin, &paid, &1_000);
+    assert_eq!(token.balance(&w.runner), 1_000);
+    assert_eq!(token.balance(&w.escrow_id), 0);
+}
+
+#[test]
+fn only_admin_may_resolve_dispute() {
+    let w = setup();
+    let escrow = w.escrow();
+    let outsider = Address::generate(&w.env);
+    let job_id = disputed_job(&w);
+
+    assert_eq!(
+        escrow.try_resolve_dispute(&outsider, &job_id, &500),
+        Err(Ok(Error::Unauthorized))
+    );
+    assert_eq!(
+        escrow.try_resolve_dispute(&w.requester, &job_id, &500),
+        Err(Ok(Error::Unauthorized))
+    );
+    assert_eq!(escrow.get_job(&job_id).status, JobStatus::Disputed);
+}
+
+#[test]
+fn resolve_dispute_requires_a_disputed_job() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    let queued = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    assert_eq!(
+        escrow.try_resolve_dispute(&w.admin, &queued, &500),
+        Err(Ok(Error::InvalidStatus))
+    );
+
+    escrow.submit_proof(&w.runner, &proof(&w.env, queued, 20, 0));
+    assert_eq!(
+        escrow.try_resolve_dispute(&w.admin, &queued, &500),
+        Err(Ok(Error::InvalidStatus))
+    );
+}
+
+#[test]
+fn resolve_dispute_rejects_share_outside_budget() {
+    let w = setup();
+    let escrow = w.escrow();
+    let job_id = disputed_job(&w);
+
+    assert_eq!(
+        escrow.try_resolve_dispute(&w.admin, &job_id, &-1),
+        Err(Ok(Error::InvalidShare))
+    );
+    assert_eq!(
+        escrow.try_resolve_dispute(&w.admin, &job_id, &1_001),
+        Err(Ok(Error::InvalidShare))
+    );
+    assert_eq!(escrow.get_job(&job_id).status, JobStatus::Disputed);
+}
+
+// ---------------------------------------------------------------------------
+// storage TTL
+// ---------------------------------------------------------------------------
+
+#[test]
+fn mutating_calls_extend_instance_ttl_before_expiry() {
+    use soroban_sdk::testutils::storage::Instance as _;
+
+    let w = setup();
+    let initial = w
+        .env
+        .as_contract(&w.escrow_id, || w.env.storage().instance().get_ttl());
+    assert!(initial >= 500_000, "init should set a ~30 day instance TTL");
+
+    // Move to within the bump threshold without letting the entry expire.
+    w.env.ledger().set_sequence_number(initial - 10_000);
+    w.env.ledger().set_timestamp(1_000);
+    w.escrow()
+        .create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+
+    let after = w
+        .env
+        .as_contract(&w.escrow_id, || w.env.storage().instance().get_ttl());
+    assert!(after >= 500_000, "create_job should bump the instance TTL");
+}
+
+// ---------------------------------------------------------------------------
+// invariants across a full lifecycle
+// ---------------------------------------------------------------------------
+
+#[test]
+fn contract_balance_always_equals_open_escrow_total() {
+    let w = setup();
+    let escrow = w.escrow();
+    let token = w.token();
+
+    w.env.ledger().set_timestamp(1_000);
+    let settled = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
+    let disputed = escrow.create_job(&w.requester, &w.runner, &w.token_id, &2_000, &20, &100);
+    let cancelled = escrow.create_job(&w.requester, &w.runner, &w.token_id, &3_000, &30, &100);
+    assert_eq!(token.balance(&w.escrow_id), open_escrow_total(&w));
+
+    // Two proofs land; the third job stays queued.
+    w.env.ledger().set_timestamp(1_010);
+    escrow.submit_proof(&w.runner, &proof(&w.env, settled, 50, 0));
+    escrow.submit_proof(&w.runner, &proof(&w.env, disputed, 10, 0));
+    assert_eq!(token.balance(&w.escrow_id), open_escrow_total(&w));
+
+    // Dispute one job, then settle the other once its window closes.
+    w.env.ledger().set_timestamp(1_100);
+    escrow.dispute_job(&w.requester, &disputed);
+    assert_eq!(token.balance(&w.escrow_id), open_escrow_total(&w));
+
+    w.env.ledger().set_timestamp(1_310);
+    escrow.claim_payout(&settled);
+    assert_eq!(token.balance(&w.escrow_id), open_escrow_total(&w));
+
+    // Resolve the dispute, then refund the expired queued job.
+    escrow.resolve_dispute(&w.admin, &disputed, &500);
+    assert_eq!(token.balance(&w.escrow_id), open_escrow_total(&w));
+
+    escrow.cancel_unclaimed_job(&w.requester, &cancelled);
+    assert_eq!(token.balance(&w.escrow_id), 0);
+    assert_eq!(open_escrow_total(&w), 0);
 }

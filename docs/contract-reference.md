@@ -17,7 +17,22 @@ One-time setup. Stores the administrator and the dispute window.
 | `admin` | `Address` | Must authorize the call; stored for future admin actions. |
 | `dispute_window_secs` | `u64` | Seconds a requester has to challenge a proof. |
 
-Fails with `AlreadyInitialized` if called twice.
+Fails with `AlreadyInitialized` if called twice, and with
+`InvalidDisputeWindow` if `dispute_window_secs` is `0`.
+
+### `update_dispute_window(env, admin, dispute_window_secs) -> Result<(), Error>`
+
+Changes the dispute window captured by jobs created after this call. Existing
+jobs keep the window that was live when `create_job` ran. Only the stored admin
+may call it, and the new window must be non-zero.
+
+| Parameter | Type | Constraint |
+| --- | --- | --- |
+| `admin` | `Address` | Must equal the stored admin; must authorize. |
+| `dispute_window_secs` | `u64` | Must be `> 0`. |
+
+Errors: `NotInitialized`, `Unauthorized`, `InvalidDisputeWindow`. Emits
+`DisputeWindowUpdated`.
 
 ## Job lifecycle
 
@@ -36,8 +51,10 @@ from `requester` into the contract, then records a `Queued` job. Returns the new
 | `rate_per_second` | `i128` | Must be `> 0`. |
 | `max_duration_secs` | `u64` | Must be `> 0`. |
 
-Errors: `NotInitialized`, `InvalidBudget`, `InvalidRate`, `InvalidDuration`, plus
-any token-transfer failure (which reverts the whole call).
+The job also captures the current `dispute_window_secs`; later admin changes do
+not rewrite it. Errors: `NotInitialized`, `InvalidBudget`, `InvalidRate`,
+`InvalidDuration`, plus any token-transfer failure (which reverts the whole
+call). Emits `JobCreated`.
 
 ### `submit_proof(env, runner, proof) -> Result<(), Error>`
 
@@ -68,7 +85,8 @@ Errors: `JobNotFound`, `InvalidStatus`, `ProofNotFound`, `DisputeWindowActive`,
 ### `dispute_job(env, requester, job_id) -> Result<(), Error>`
 
 Challenges a `Completed` proof inside the window, moving the job to `Disputed`
-and halting automatic payout.
+and halting automatic payout. Funds stay escrowed until the admin resolves the
+dispute.
 
 | Parameter | Type | Constraint |
 | --- | --- | --- |
@@ -76,7 +94,25 @@ and halting automatic payout.
 | `job_id` | `u64` | Must be a `Completed` job whose window is still open. |
 
 Errors: `JobNotFound`, `InvalidStatus`, `Unauthorized`, `DisputeWindowElapsed`,
-`MathOverflow`.
+`MathOverflow`. Emits `JobDisputed`.
+
+### `resolve_dispute(env, admin, job_id, runner_award) -> Result<(), Error>`
+
+Resolves a `Disputed` job by splitting the escrow. The runner receives
+`runner_award`; the requester receives `max_budget - runner_award`. The job moves
+to the terminal `Resolved` state, so it can never be claimed or resolved again.
+
+| Parameter | Type | Constraint |
+| --- | --- | --- |
+| `admin` | `Address` | Must equal the stored admin; must authorize. |
+| `job_id` | `u64` | Must be `Disputed`. |
+| `runner_award` | `i128` | Must be `0..=max_budget`. |
+
+Errors: `JobNotFound`, `InvalidStatus`, `Unauthorized`, `InvalidShare`. Emits
+`DisputeResolved`.
+
+This is the only admin power over funds. The split is an explicit trust
+decision; see the [threat model](threat-model.md#admin-dispute-resolution).
 
 ### `cancel_unclaimed_job(env, requester, job_id) -> Result<(), Error>`
 
@@ -89,7 +125,7 @@ Refunds a still-`Queued` job in full once `max_duration_secs` has elapsed since
 | `job_id` | `u64` | Must be `Queued` and past expiry. |
 
 Errors: `JobNotFound`, `InvalidStatus`, `Unauthorized`, `JobNotExpired`,
-`MathOverflow`.
+`MathOverflow`. Emits `JobRefunded`.
 
 ## Views
 
@@ -100,13 +136,25 @@ Errors: `JobNotFound`, `InvalidStatus`, `Unauthorized`, `JobNotExpired`,
 | `job_count()` | `u64` | Number of jobs ever created. |
 | `dispute_window()` | `u64` | Configured window, in seconds. |
 | `admin()` | `Address` | Configured administrator. |
+| `get_config()` | `Result<(Address, u64, u64), Error>` | Admin, dispute window, and job count in one call. |
 
 ## Events
 
-The current contracts **emit no events.** Indexers must poll views. Emitting
-`contractevent`s on create, proof, settle, dispute, and refund is tracked as
-planned work — see the planned issues in
-[`SUBMISSION.md`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/SUBMISSION.md).
+Every state transition emits a typed `#[contractevent]` that is included in the
+contract spec:
+
+| Event | Emitted by | Fields |
+| --- | --- | --- |
+| `EscrowInitialized` | `init` | `admin`, `dispute_window_secs` |
+| `JobCreated` | `create_job` | `job_id` (topic), requester, runner, token, budget, rate, duration, dispute window |
+| `ProofSubmitted` | `submit_proof` | `job_id` (topic), runner, duration, exit code, output hash |
+| `PayoutClaimed` | `claim_payout` | `job_id` (topic), requester, runner, earnings, refund |
+| `JobDisputed` | `dispute_job` | `job_id` (topic), requester |
+| `JobRefunded` | `cancel_unclaimed_job` | `job_id` (topic), requester, amount |
+| `DisputeResolved` | `resolve_dispute` | `job_id` (topic), admin, runner award, requester refund |
+| `DisputeWindowUpdated` | `update_dispute_window` | admin, new window |
+
+No event is emitted when a call fails; state changes and events are atomic.
 
 ## Error codes
 
@@ -129,12 +177,15 @@ variant name. Codes are never renumbered.
 | 12 | `DisputeWindowElapsed` | The challenge came after the window closed. |
 | 13 | `JobNotExpired` | The queued job has not passed its expiry yet. |
 | 14 | `MathOverflow` | A settlement computation overflowed `i128`. |
+| 15 | `InvalidShare` | A dispute resolution award is outside `0..=max_budget`. |
+| 16 | `InvalidDisputeWindow` | The dispute window must be strictly positive. |
 
 ## Mock token
 
 [`contracts/mock_token/`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/mock_token)
 implements just enough of the
 token surface for tests: `mint`, `burn`, `balance`, and `transfer` (with
-`from.require_auth()`). Its `mint` is unauthenticated and **test-only** — never
+`from.require_auth()`). Amounts use checked arithmetic, and balance entries are
+TTL-extended on write. Its `mint` is unauthenticated and **test-only** — never
 deploy it as real money. In production, pass a SEP-41 token or its Stellar Asset
 Contract address as `payment_token`.

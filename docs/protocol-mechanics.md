@@ -16,6 +16,7 @@ A job is an escrow record with a spend ceiling and a linear price:
 | `max_budget` | `i128` | Collateral locked at creation; the absolute spend ceiling. |
 | `rate_per_second` | `i128` | Linear price, in token base units, per executed second. |
 | `max_duration_secs` | `u64` | Upper bound on billable seconds; also the unclaimed-job timeout. |
+| `dispute_window_secs` | `u64` | Dispute window captured at `create_job`; later admin changes do not affect this job. |
 | `status` | `JobStatus` | Current lifecycle state. |
 | `created_at` | `u64` | Ledger timestamp the escrow opened. |
 | `completed_at` | `u64` | Ledger timestamp the proof was accepted (`0` while queued). |
@@ -39,7 +40,9 @@ The runner's proof is a separate record:
                            │ cancel_unclaimed_job   ├── claim_payout ──► Settled
                            ▼ (after max_duration)   │   (after window)
                         Refunded                    └── dispute_job ──► Disputed
-                                                            (in window)
+                                                                            │
+                                                        resolve_dispute ────┴──► Resolved
+                                                        (admin)
 ```
 
 - `Queued` → `Completed` via `submit_proof`, by the designated `runner`.
@@ -49,10 +52,13 @@ The runner's proof is a separate record:
   `completed_at + dispute_window_secs` has passed.
 - `Completed` → `Disputed` via `dispute_job`, by the `requester`, only while the
   dispute window is open.
+- `Disputed` → `Resolved` via `resolve_dispute`, by the configured `admin`, which
+  splits the escrow between the runner and the requester.
 
-`Settled` and `Refunded` are terminal. `Disputed` stops automatic payout
-entirely; funds stay escrowed until an off-chain resolution decides where they
-go.
+`Settled`, `Refunded`, and `Resolved` are terminal. `Disputed` stops automatic
+payout entirely; funds stay escrowed until the admin resolves the split. The
+resolution is an explicit trust boundary: the contract enforces the bounds and
+the exact drain, but the admin chooses the award within `0..=max_budget`.
 
 ## Settlement math
 
@@ -62,11 +68,13 @@ earnings  = min(metered, max_budget)                  (runner's payout)
 refund    = max_budget - earnings                     (returned to requester)
 ```
 
-Three invariants hold on every settlement:
+Four invariants hold on every settlement:
 
 1. `earnings + refund == max_budget` — the escrow drains exactly.
 2. `earnings <= max_budget` — a runner can never be paid more than was locked.
 3. `duration_secs <= max_duration_secs` — enforced before the proof is stored.
+4. `runner_award + requester_refund == max_budget` on resolution, with
+   `runner_award` bounded by `0..=max_budget`.
 
 ## Worked examples
 
@@ -101,11 +109,23 @@ after `created_at`, the requester calls `cancel_unclaimed_job` and the entire
 
 The window exists so a requester can stop payment on a proof they believe is
 wrong — for example, a `duration_secs` that does not match observed execution.
-It is a single `dispute_window_secs` value set at `init`, applied to every job.
+It is a single global `dispute_window_secs` value set at `init` and adjustable by
+the admin. Each job captures the live value in `create_job` and uses that
+snapshot when it is settled or disputed, so an update never rewrites a job that
+is already in flight.
 
 - `claim_payout` requires `ledger.timestamp >= completed_at + dispute_window_secs`.
 - `dispute_job` requires `ledger.timestamp < completed_at + dispute_window_secs`.
 
-The window is intentionally narrow-scope: this contract does not adjudicate
-disputes. It halts payout and holds funds. Resolution is an off-chain process
-(and a planned on-chain admin resolution path, tracked as an issue).
+The contract enforces the timing and the split bounds, but it cannot judge
+whether work was correct. `dispute_job` halts payout; `resolve_dispute` then lets
+the admin award `0..=max_budget` to the runner and refund the remainder. That is
+the complete on-chain path — there is no separate off-chain release step.
+
+## Events
+
+Each transition publishes a typed contract event (`JobCreated`,
+`ProofSubmitted`, `PayoutClaimed`, `JobDisputed`, `JobRefunded`,
+`DisputeResolved`), plus `EscrowInitialized` and `DisputeWindowUpdated` for
+configuration. Indexers can consume these directly; see the
+[contract reference](contract-reference.md#events).

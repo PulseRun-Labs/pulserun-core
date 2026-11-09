@@ -14,7 +14,7 @@ cd pulserun-core
 rustup target add wasm32v1-none     # needed for the wasm build
 rustup component add rustfmt clippy # needed for the lint gate
 
-cargo test --all                    # should be green before you start
+cargo test --all --locked           # should be green before you start
 ```
 
 ## The local gate
@@ -23,10 +23,10 @@ CI runs exactly these commands, in this order. Run them before opening a PR:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --all --locked
 SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 \
-  cargo build --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+  cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
 ```
 
 `cargo fmt --all` rewrites files; the `--check` form only verifies. Clippy is a
@@ -43,6 +43,8 @@ why in the PR description.
 - **Storage goes through `storage.rs`.** Add a `DataKey` variant and typed
   accessors; don't reach into `env.storage()` from `lib.rs`.
 - **Types live in `types.rs`** and derive `Clone, Debug, Eq, PartialEq`.
+- **Events live in `events.rs`.** Add a `#[contractevent]` type for any new
+  state transition, publish it after the state write, and assert it in tests.
 - **Authorization first.** Any entrypoint that acts on behalf of an address must
   validate the caller against stored state and call `require_auth`.
 - **Tests are mandatory.** New behavior needs a test in

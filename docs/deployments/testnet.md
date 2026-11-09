@@ -1,10 +1,13 @@
 # Testnet deployment
 
-> **Status: deployed and verified on Stellar testnet.** The IDs below come from a
-> real deploy via
-> [`scripts/deploy-testnet.sh`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/scripts/deploy-testnet.sh)
-> and are reproducible from `main`. `MockToken` is test-only — never deploy it as
-> real money.
+> **Status: v0.1.0 baseline deployed and verified on Stellar testnet.** The IDs
+> below come from a real deploy via
+> [`scripts/deploy-testnet.sh`](https://github.com/PulseRun-Labs/pulserun-core/blob/main/scripts/deploy-testnet.sh).
+> The current `main` is **v0.2.0**, which adds typed lifecycle events, admin
+> dispute resolution, and instance TTL extension. Those entrypoints are not in
+> the v0.1.0 instance recorded below, so redeploy the current build to exercise
+> them. The transaction hashes remain valid evidence of the original settlement
+> flow. `MockToken` is test-only — never deploy it as real money.
 
 ## Deployed contracts
 
@@ -66,6 +69,18 @@ Final balances confirm the settlement split exactly:
 
 `200 + 800 = 1000 = max_budget`, and the escrow holds nothing — the core
 invariant, observed on-chain.
+
+## Redeploying the current build
+
+```bash
+DISPUTE_WINDOW_SECS=86400 ./scripts/deploy-testnet.sh
+```
+
+The script rebuilds both contracts, deploys them in dependency order, calls
+`init`, and rewrites [`testnet.env`](testnet.env). After redeploying, exercise
+`create_job` → `submit_proof` → `dispute_job` → `resolve_dispute` and confirm the
+`DisputeResolved` event and the final balances. Update the contract IDs and WASM
+hashes above from the new `testnet.env`; do not mix IDs from different builds.
 
 ## Mainnet
 

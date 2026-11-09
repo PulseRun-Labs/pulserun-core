@@ -11,10 +11,10 @@ Run these before opening a pull request. They are exactly what CI runs:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --all --locked
 SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 \
-  cargo build --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+  cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
 ```
 
 Clippy is a hard gate: `-D warnings` means one lint fails the build.
@@ -26,6 +26,8 @@ Clippy is a hard gate: `-D warnings` means one lint fails the build.
   `errors.rs`. Error codes are ABI: never renumber.
 - **Storage via `storage.rs`.** Add a `DataKey` variant; do not touch
   `env.storage()` from `lib.rs`.
+- **Events via `events.rs`.** Add a `#[contractevent]` for each new state
+  transition; publish it after the state write and assert it in a test.
 - **Authorization first.** Validate the caller against stored state, then call
   `require_auth()`.
 - **Tests are mandatory.** New behavior needs a test covering the failure path

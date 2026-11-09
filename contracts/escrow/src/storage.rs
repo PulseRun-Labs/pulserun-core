@@ -37,6 +37,18 @@ pub fn require_initialized(env: &Env) -> Result<(), Error> {
     }
 }
 
+/// Bumps the contract instance entry so configuration cannot expire while the
+/// escrow is still in use.
+///
+/// Instance storage is not extended by the host automatically: without this,
+/// `Admin`, `DisputeWindow`, and `JobCount` would fall out of the ledger after
+/// the TTL elapses and the contract would be permanently unusable.
+pub fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+}
+
 pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
 }
@@ -60,15 +72,15 @@ pub fn get_dispute_window(env: &Env) -> u64 {
 }
 
 /// Allocates the next job id (1, 2, 3, ...) and persists the counter.
-pub fn next_job_id(env: &Env) -> u64 {
+pub fn next_job_id(env: &Env) -> Result<u64, Error> {
     let count: u64 = env
         .storage()
         .instance()
         .get(&DataKey::JobCount)
         .unwrap_or(0);
-    let job_id = count + 1;
+    let job_id = count.checked_add(1).ok_or(Error::MathOverflow)?;
     env.storage().instance().set(&DataKey::JobCount, &job_id);
-    job_id
+    Ok(job_id)
 }
 
 /// Read-only accessor for the number of jobs ever created.
