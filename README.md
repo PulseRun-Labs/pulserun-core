@@ -38,6 +38,7 @@ published on GitHub Pages.
 - [Repository layout](#repository-layout)
 - [Contract API](#contract-api)
 - [Quick start](#quick-start)
+- [Live testnet deployment](#live-testnet-deployment)
 - [Security model](#security-model)
 - [Contributing](#contributing)
 - [License](#license)
@@ -264,6 +265,36 @@ identity, resolves the **native XLM Stellar Asset Contract**, deploys the escrow
 and calls `init`. Set `PAYMENT_ASSET="CODE:ISSUER"` to settle in an issued asset
 instead of XLM. See
 [`docs/deployments/testnet.md`](docs/deployments/testnet.md) to record the result.
+
+## Live testnet deployment
+
+The current **v0.3.0** build is deployed and verified on Stellar testnet. It
+settles in the native XLM Stellar Asset Contract; no custom token contract is
+deployed.
+
+| Item | Value |
+| --- | --- |
+| `PulseEscrow` | [`CAPNQ4LWFOVVJG76UHGAOUT4RL4OH2LJKQOY36KYU5JQ7SEJ5F4DSI2D`](https://stellar.expert/explorer/testnet/contract/CAPNQ4LWFOVVJG76UHGAOUT4RL4OH2LJKQOY36KYU5JQ7SEJ5F4DSI2D) |
+| Payment asset | Native XLM SAC [`CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`](https://stellar.expert/explorer/testnet/contract/CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC) |
+| Admin | `GAFRQAM4VZDKUY5TL4PJFFLCAN5E7PPDXP3QCELHHMBP4QZZY54Q7IQP` |
+| Dispute window | `60` seconds (shortened for the demo; production default is `86400`) |
+| WASM hash | `ac2afe1fb2c4e037cb781b3827ea0adc11c1edd34578f7245205603c54e69417` |
+
+A full lifecycle ran against the public network: `create_job` locked
+`10,000,000` stroops (1 XLM), `submit_proof` recorded a 20-second run, an early
+`claim_payout` was rejected with `Error #11` (`DisputeWindowActive`), and the
+post-window claim paid the runner `2,000,000` stroops, refunded the requester
+`8,000,000`, and drained the escrow to `0`. Job `1` ended `Settled`.
+
+- `init`: [tx](https://stellar.expert/explorer/testnet/tx/c20632f263f493b80db7de868342e02bb66d5f9fdd78a42cd6bff4b0a0e276f0)
+- `create_job`: [tx](https://stellar.expert/explorer/testnet/tx/b86876c8e30c0916ff851908cdf57b942aa564bc25ffd0de731454b24e3c2010)
+- `submit_proof`: [tx](https://stellar.expert/explorer/testnet/tx/8b98b93a8cb932d16b631dcc6933d419e7064941d485c516d0462e65bd94d5eb)
+- `claim_payout`: [tx](https://stellar.expert/explorer/testnet/tx/7a51c15c03d1dfcbf959baee7d570124da39c307d35a4b9378ec38e5d89820ef)
+
+The admin is a testnet-only key for this demo; use a multisignature or governed
+account for real value. The earlier v0.1.0 deployment is retained as historical
+evidence in [`docs/deployments/testnet.md`](docs/deployments/testnet.md); it used
+the retired test-only token.
 
 ## Security model
 
