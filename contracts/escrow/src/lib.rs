@@ -74,6 +74,11 @@ impl PulseEscrow {
     /// Transfers `max_budget` of `payment_token` from `requester` into the
     /// contract and records a [`ComputeJob`] in the `Queued` state. Returns the
     /// newly allocated `job_id`.
+    ///
+    /// `payment_token` may be any SEP-41 token. On Stellar that is normally a
+    /// Stellar Asset Contract (SAC) address, which wraps a native or issued
+    /// asset; it is supplied per job, so the escrow has no deploy-time token
+    /// dependency.
     pub fn create_job(
         env: Env,
         requester: Address,

@@ -194,8 +194,7 @@ pulserun-core/
 │   │       ├── events.rs    # typed lifecycle events
 │   │       ├── storage.rs   # keys, TTL policy, accessors
 │   │       ├── errors.rs    # stable error codes
-│   │       └── test.rs      # integration-style unit tests
-│   └── mock_token/      # minimal SEP-41-style token for tests
+│   │       └── test.rs      # integration tests against the Stellar Asset Contract
 ├── docs/                # documentation source (mdBook → GitHub Pages)
 ├── scripts/             # deploy + issue-generation tooling
 ├── .github/workflows/   # CI: fmt, clippy, test, wasm build
@@ -223,44 +222,48 @@ Full reference including error codes:
 
 ## Quick start
 
-Everything runs with a stock Rust toolchain — no Stellar CLI, no Docker, no
-network services.
+Tests run with a stock Rust toolchain. Building a deployable contract and
+deploying need the [Stellar CLI](https://github.com/stellar/stellar-cli); there
+is no Docker or network service involved in either.
 
 ```bash
 # 1. One-time toolchain setup (Rust 1.84+ for the wasm32v1-none target).
 rustup target add wasm32v1-none
 rustup component add rustfmt clippy
+curl -fsSL github.com/stellar/stellar-cli/raw/main/install.sh | sh
 
-# 2. Run the full test suite (48 tests: 39 escrow + 9 token).
+# 2. Run the full test suite (41 tests).
 cargo test --all --locked
 
-# 3. Match CI exactly.
+# 3. Match the lint gate.
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 
-# 4. Compile the deployable contracts.
-SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 \
-  cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+# 4. Compile the deployable contract.
+stellar contract build
 ```
 
-Artifacts land in `target/wasm32v1-none/release/{pulserun_escrow,mock_token}.wasm`.
+The artifact lands at `target/wasm32v1-none/release/pulserun_escrow.wasm`.
 
-> **Why the env var?** `soroban-sdk` v28 refuses to emit a contract wasm unless
-> the build system advertises spec-shaking support; the Stellar CLI sets that
-> flag itself. Setting it manually lets plain `cargo` compile wasm for CI and
-> local checks. **For real deployments, prefer `stellar contract build`**, which
-> produces a properly spec-shaken, canonical artifact.
+> **Why the CLI?** From `soroban-sdk` 28 onward only `stellar contract build`
+> applies the spec-shaking and optimization steps the Soroban runtime requires;
+> plain `cargo build` is not a supported way to produce a deployable contract.
+
+The tests exercise the real **Stellar Asset Contract** (SAC) that backs every
+Stellar asset — the same contract that settles on-chain — rather than a
+hand-written stand-in token.
 
 ### Deploying (testnet)
 
 ```bash
-./scripts/deploy-testnet.sh        # builds, deploys in order, prints contract ids
+./scripts/deploy-testnet.sh        # builds, deploys, initializes, prints contract ids
 ```
 
-The script configures the network and identity, deploys `mock_token` then the
-escrow (the escrow settles in a token), calls `init`, and prints
-copy-pasteable contract ids. See
-[`docs/deployments/testnet.md`](docs/deployments/testnet.md) to record them.
+The script builds with `stellar contract build`, creates and funds a testnet
+identity, resolves the **native XLM Stellar Asset Contract**, deploys the escrow,
+and calls `init`. Set `PAYMENT_ASSET="CODE:ISSUER"` to settle in an issued asset
+instead of XLM. See
+[`docs/deployments/testnet.md`](docs/deployments/testnet.md) to record the result.
 
 ## Security model
 

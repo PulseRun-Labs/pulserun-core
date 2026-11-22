@@ -49,7 +49,8 @@ pub struct ComputeJob {
     pub requester: Address,
     /// The party expected to execute the job.
     pub runner: Address,
-    /// Token used to denominate `max_budget` and payouts.
+    /// Token used to denominate `max_budget` and payouts. Normally a Stellar
+    /// Asset Contract (SAC) address, but any SEP-41 token is accepted.
     pub payment_token: Address,
     /// Collateral locked at creation; the absolute spend ceiling.
     pub max_budget: i128,

@@ -13,8 +13,7 @@ Run these before opening a pull request. They are exactly what CI runs:
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --all --locked
-SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 \
-  cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+stellar contract build
 ```
 
 Clippy is a hard gate: `-D warnings` means one lint fails the build.

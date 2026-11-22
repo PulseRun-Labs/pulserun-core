@@ -9,21 +9,25 @@ alongside the [contract reference](contract-reference.md).
 | Contract | Path | Single responsibility |
 | --- | --- | --- |
 | `PulseEscrow` | [`contracts/escrow`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/escrow) | Custody requester collateral and settle jobs: create, prove, claim, dispute, refund. |
-| `MockToken` | [`contracts/mock_token`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/mock_token) | A test-only SEP-41-style token to exercise settlement. Never deployed as money. |
 
-Each contract owns exactly one concern. `PulseEscrow` is the only contract that
-holds value; `MockToken` exists purely so the escrow's token transfers run in
-tests, and on a real network it is replaced by a SEP-41 token or the Stellar
-Asset Contract of an issued asset.
+`PulseEscrow` is the only contract in this repository and the only one that
+holds value. The settlement rail is a **Stellar Asset Contract (SAC)** — the
+built-in Soroban contract that backs every Stellar asset, issued or native. The
+escrow never deploys or owns a token; it calls the SEP-41 interface exposed by
+the SAC at the address passed to `create_job`.
+
+Tests register a real SAC with `Env::register_stellar_asset_contract_v2`, so the
+suite exercises the same contract that moves funds on-chain instead of a
+hand-written stand-in.
 
 ## Dependency graph
 
 ```text
-             calls transfer/balance
-┌────────────┐  ───────────────────────►  ┌──────────────────┐
-│ PulseEscrow │                            │ payment_token    │  (SEP-41 / SAC,
-│  (custody)  │  ◄───────────────────────  │ / MockToken      │   test-only)
-└────────────┘                            └──────────────────┘
+             calls transfer/balance (SEP-41)
+┌────────────┐  ───────────────────────►  ┌────────────────────────┐
+│ PulseEscrow │                            │ Stellar Asset Contract │  (built into
+│  (custody)  │  ◄───────────────────────  │  (native or issued)    │   the network)
+└────────────┘                            └────────────────────────┘
       ▲
       │ invoked by requester / runner / anyone
 ┌───────────────────────────────────────────────────────────┐
@@ -33,15 +37,16 @@ Asset Contract of an issued asset.
 
 **Build and deploy order (dependencies first):**
 
-1. Deploy the settlement token (testnet: `mock_token`; mainnet: the SEP-41/SAC
-   token address, which already exists).
-2. Deploy `pulserun_escrow`. It has no deploy-time dependency on the token — the
-   token address is supplied per job to `create_job`.
+1. Resolve the SAC address for the asset to settle in. Native XLM's SAC exists on
+   every network; an issued asset's SAC is derived from its `CODE:ISSUER` and
+   exists without a deployment step.
+2. Deploy `pulserun_escrow`. It has no deploy-time dependency on the asset — the
+   SAC address is supplied per job to `create_job`.
 3. `init(admin, dispute_window_secs)` on the escrow.
 
-There is no inter-contract call between `PulseEscrow` and any other contract
-except the token transfer that settles a job, so the escrow can be deployed and
-upgraded independently of the token.
+There is no inter-contract call between `PulseEscrow` and any contract other
+than the SAC transfer that moves funds, so the escrow can be deployed and
+upgraded independently of the asset.
 
 ## Storage layout
 

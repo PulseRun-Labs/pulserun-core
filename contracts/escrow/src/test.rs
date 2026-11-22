@@ -1,9 +1,8 @@
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
+    token::{StellarAssetClient, TokenClient},
     Address, BytesN, Env,
 };
-
-use mock_token::{MockToken, MockTokenClient};
 
 use crate::{
     DisputeResolved, DisputeWindowUpdated, Error, EscrowInitialized, ExecutionProof, JobCreated,
@@ -30,13 +29,17 @@ impl World {
         PulseEscrowClient::new(&self.env, &self.escrow_id)
     }
 
-    fn token(&self) -> MockTokenClient<'_> {
-        MockTokenClient::new(&self.env, &self.token_id)
+    fn token(&self) -> TokenClient<'_> {
+        TokenClient::new(&self.env, &self.token_id)
     }
 }
 
-/// Boots a fresh environment: a registered mock token funded for the requester,
-/// a registered escrow initialized with [`DISPUTE_WINDOW`].
+/// Boots a fresh environment: a Stellar Asset Contract funded for the
+/// requester, and a registered escrow initialized with [`DISPUTE_WINDOW`].
+///
+/// The payment rail is the real SAC that backs every Stellar asset, not a
+/// hand-written token, so the suite exercises the same contract that settles
+/// on-chain.
 fn setup() -> World {
     let env = Env::default();
     env.mock_all_auths();
@@ -45,8 +48,10 @@ fn setup() -> World {
     let requester = Address::generate(&env);
     let runner = Address::generate(&env);
 
-    let token_id = env.register(MockToken, ());
-    MockTokenClient::new(&env, &token_id).mint(&requester, &FUNDING);
+    let token_id = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    StellarAssetClient::new(&env, &token_id).mint(&requester, &FUNDING);
 
     let escrow_id = env.register(PulseEscrow, ());
     PulseEscrowClient::new(&env, &escrow_id).init(&admin, &DISPUTE_WINDOW);
@@ -74,9 +79,14 @@ fn proof(env: &Env, job_id: u64, duration_secs: u64, exit_code: i32) -> Executio
     }
 }
 
-/// Asserts that the last invocation emitted exactly `event` and nothing else.
-fn assert_only_event(w: &World, event: impl soroban_sdk::events::Event) {
-    assert_eq!(w.env.events().all(), [event.to_xdr(&w.env, &w.escrow_id)]);
+/// Asserts that the invocation emitted exactly `event` from the escrow.
+///
+/// Settlement calls the Stellar Asset Contract, which emits its own `transfer`
+/// events, so the assertion is scoped to events published by the escrow.
+fn assert_escrow_event(w: &World, event: impl soroban_sdk::events::Event) {
+    let emitted = w.env.events().all().filter_by_contract(&w.escrow_id);
+    assert_eq!(emitted.events().len(), 1);
+    assert_eq!(emitted.events()[0], event.to_xdr(&w.env, &w.escrow_id));
 }
 
 /// Sum of `max_budget` across jobs that have not reached a terminal state.
@@ -166,16 +176,43 @@ fn create_job_rejects_invalid_parameters() {
 }
 
 #[test]
+fn create_job_rejects_requester_without_token_balance() {
+    let w = setup();
+    let escrow = w.escrow();
+    let unfunded = Address::generate(&w.env);
+
+    // The SAC refuses the transfer, so an unfunded job is never recorded.
+    assert!(escrow
+        .try_create_job(&unfunded, &w.runner, &w.token_id, &1_000, &10, &100)
+        .is_err());
+    assert_eq!(escrow.job_count(), 0);
+}
+
+#[test]
+fn create_job_rejects_payment_token_that_is_not_a_token() {
+    let w = setup();
+    let escrow = w.escrow();
+
+    // Pointing `payment_token` at the escrow itself is not a token contract,
+    // so the cross-contract transfer reverts the whole call.
+    assert!(escrow
+        .try_create_job(&w.requester, &w.runner, &w.escrow_id, &1_000, &10, &100)
+        .is_err());
+    assert_eq!(escrow.job_count(), 0);
+}
+
+#[test]
 fn create_job_before_init_is_rejected() {
     let env = Env::default();
     env.mock_all_auths();
     let escrow_id = env.register(PulseEscrow, ());
     let escrow = PulseEscrowClient::new(&env, &escrow_id);
 
+    let admin = Address::generate(&env);
     let requester = Address::generate(&env);
     let runner = Address::generate(&env);
-    let token_id = env.register(MockToken, ());
-    MockTokenClient::new(&env, &token_id).mint(&requester, &FUNDING);
+    let token_id = env.register_stellar_asset_contract_v2(admin).address();
+    StellarAssetClient::new(&env, &token_id).mint(&requester, &FUNDING);
 
     assert_eq!(
         escrow.try_create_job(&requester, &runner, &token_id, &1_000, &10, &100),
@@ -185,16 +222,23 @@ fn create_job_before_init_is_rejected() {
 
 #[test]
 fn create_job_requires_requester_authorization() {
-    // Deliberately never call `mock_all_auths`: `create_job` must fail without a
-    // real requester signature. The escrow is configured by writing storage
-    // directly rather than via `init`, which itself needs admin authorization.
+    // `create_job` must fail without a real requester signature. The escrow is
+    // configured by writing storage directly rather than via `init`, which
+    // itself needs admin authorization.
     let env = Env::default();
     let admin = Address::generate(&env);
     let requester = Address::generate(&env);
     let runner = Address::generate(&env);
 
-    let token_id = env.register(MockToken, ());
-    MockTokenClient::new(&env, &token_id).mint(&requester, &FUNDING);
+    // Minting needs the SAC admin's authorization, so mocking is enabled only
+    // for that setup call and then disabled; `create_job` itself must obtain the
+    // requester's real authorization.
+    let token_id = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    env.mock_all_auths();
+    StellarAssetClient::new(&env, &token_id).mint(&requester, &FUNDING);
+    env.set_auths(&[]);
 
     let escrow_id = env.register(PulseEscrow, ());
     env.as_contract(&escrow_id, || {
@@ -514,7 +558,7 @@ fn get_config_returns_all_configuration_in_one_call() {
 fn init_emits_escrow_initialized() {
     let w = setup();
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         EscrowInitialized {
             admin: w.admin.clone(),
@@ -544,7 +588,7 @@ fn create_job_emits_job_created() {
 
     let job_id = escrow.create_job(&w.requester, &w.runner, &w.token_id, &1_000, &10, &100);
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         JobCreated {
             job_id,
@@ -568,7 +612,7 @@ fn submit_proof_emits_proof_submitted() {
     w.env.ledger().set_timestamp(5_000);
     escrow.submit_proof(&w.runner, &proof(&w.env, job_id, 40, 0));
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         ProofSubmitted {
             job_id,
@@ -592,7 +636,7 @@ fn claim_payout_emits_payout_claimed() {
     w.env.ledger().set_timestamp(1_020 + DISPUTE_WINDOW);
     escrow.claim_payout(&job_id);
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         PayoutClaimed {
             job_id,
@@ -615,7 +659,7 @@ fn dispute_job_emits_job_disputed() {
     w.env.ledger().set_timestamp(1_050);
     escrow.dispute_job(&w.requester, &job_id);
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         JobDisputed {
             job_id,
@@ -634,7 +678,7 @@ fn cancel_unclaimed_job_emits_job_refunded() {
     w.env.ledger().set_timestamp(1_100);
     escrow.cancel_unclaimed_job(&w.requester, &job_id);
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         JobRefunded {
             job_id,
@@ -655,7 +699,7 @@ fn update_dispute_window_changes_config_and_emits_event() {
 
     escrow.update_dispute_window(&w.admin, &900);
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         DisputeWindowUpdated {
             admin: w.admin.clone(),
@@ -744,7 +788,7 @@ fn resolve_dispute_splits_escrow_and_settles() {
     w.env.ledger().set_timestamp(1_500);
     escrow.resolve_dispute(&w.admin, &job_id, &150);
 
-    assert_only_event(
+    assert_escrow_event(
         &w,
         DisputeResolved {
             job_id,

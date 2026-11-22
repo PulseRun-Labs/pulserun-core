@@ -1,28 +1,32 @@
 #!/usr/bin/env bash
 #
-# Deploy PulseRun Core to Stellar testnet, in dependency order, and print the
-# resulting contract ids. Deploying this script does not touch mainnet.
+# Deploy PulseRun Core to Stellar testnet and print the resulting contract ids.
+# Deploying this script does not touch mainnet.
 #
-# Order matters: the escrow settles in a token, so the token (mock_token, for
-# testnet only) is deployed first and its id is passed nowhere at deploy time —
-# the token address is supplied per job to create_job.
+# Settlement uses a Stellar Asset Contract (SAC), never a hand-written token.
+# By default the script targets the native XLM SAC, which already exists on
+# every network; set PAYMENT_ASSET to any issued Stellar asset
+# ("CODE:ISSUER" or a saved alias) to settle in that asset instead.
 #
 # Requires: stellar-cli (https://github.com/stellar/stellar-cli)
 # Usage:    ./scripts/deploy-testnet.sh
+#           PAYMENT_ASSET="USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" \
+#             ./scripts/deploy-testnet.sh
 set -euo pipefail
 
 NETWORK="testnet"
 IDENTITY="${STELLAR_IDENTITY:-pulserun-deployer}"
 DISPUTE_WINDOW_SECS="${DISPUTE_WINDOW_SECS:-86400}"
+PAYMENT_ASSET="${PAYMENT_ASSET:-native}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_FILE="${ROOT_DIR}/docs/deployments/testnet.env"
 
 command -v stellar >/dev/null 2>&1 || {
-  echo "error: stellar-cli not found. Install: cargo install --locked stellar-cli --features opt" >&2
+  echo "error: stellar-cli not found. Install: curl -fsSL github.com/stellar/stellar-cli/raw/main/install.sh | sh" >&2
   exit 1
 }
 
-echo "==> Building contracts"
+echo "==> Building contracts with the Stellar CLI"
 cd "${ROOT_DIR}"
 stellar contract build
 
@@ -34,14 +38,11 @@ fi
 ADMIN_ADDRESS="$(stellar keys address "${IDENTITY}")"
 echo "    admin/deployer: ${ADMIN_ADDRESS}"
 
-echo "==> Deploying mock_token (testnet only)"
-TOKEN_ID="$(
-  stellar contract deploy \
-    --wasm target/wasm32v1-none/release/mock_token.wasm \
-    --network "${NETWORK}" \
-    --source "${IDENTITY}"
-)"
-echo "    mock_token: ${TOKEN_ID}"
+# The payment rail is a Stellar Asset Contract. Native XLM's SAC exists on every
+# network; any other asset is wrapped by its own SAC with the same id.
+echo "==> Resolving the Stellar Asset Contract for '${PAYMENT_ASSET}'"
+TOKEN_ID="$(stellar contract id asset --asset "${PAYMENT_ASSET}" --network "${NETWORK}")"
+echo "    payment_token (SAC): ${TOKEN_ID}"
 
 echo "==> Deploying pulserun_escrow"
 ESCROW_ID="$(
@@ -67,8 +68,9 @@ cat >"${OUT_FILE}" <<EOF
 NETWORK=${NETWORK}
 ADMIN_ADDRESS=${ADMIN_ADDRESS}
 DISPUTE_WINDOW_SECS=${DISPUTE_WINDOW_SECS}
+PAYMENT_ASSET=${PAYMENT_ASSET}
+PAYMENT_TOKEN_ID=${TOKEN_ID}
 PULSEESCROW_ID=${ESCROW_ID}
-MOCKTOKEN_ID=${TOKEN_ID}
 EOF
 
 cat <<EOF
@@ -77,7 +79,8 @@ cat <<EOF
  PulseRun Core — ${NETWORK} deployment complete
 ----------------------------------------------------------------
  PULSEESCROW_ID=${ESCROW_ID}
- MOCKTOKEN_ID=${TOKEN_ID}
+ PAYMENT_ASSET=${PAYMENT_ASSET}
+ PAYMENT_TOKEN_ID=${TOKEN_ID}
  ADMIN_ADDRESS=${ADMIN_ADDRESS}
  DISPUTE_WINDOW_SECS=${DISPUTE_WINDOW_SECS}
 ----------------------------------------------------------------

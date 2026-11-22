@@ -5,7 +5,8 @@ Stellar. This guide gets you from zero to a merged pull request.
 
 ## Getting set up
 
-You only need a stock Rust toolchain — no Stellar CLI, database, or services.
+You need a stock Rust toolchain, plus the Stellar CLI for contract builds. There
+is no database or network service.
 
 ```bash
 git clone https://github.com/PulseRun-Labs/pulserun-core
@@ -13,6 +14,7 @@ cd pulserun-core
 
 rustup target add wasm32v1-none     # needed for the wasm build
 rustup component add rustfmt clippy # needed for the lint gate
+curl -fsSL github.com/stellar/stellar-cli/raw/main/install.sh | sh
 
 cargo test --all --locked           # should be green before you start
 ```
@@ -25,8 +27,7 @@ CI runs exactly these commands, in this order. Run them before opening a PR:
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --all --locked
-SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 \
-  cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+stellar contract build
 ```
 
 `cargo fmt --all` rewrites files; the `--check` form only verifies. Clippy is a
@@ -53,10 +54,11 @@ why in the PR description.
 ## Test conventions
 
 The suite drives the real contract through generated clients on
-`soroban_sdk::Env`:
+`soroban_sdk::Env`, and settles against a real Stellar Asset Contract registered
+with `Env::register_stellar_asset_contract_v2`:
 
 ```rust
-let w = setup();                       // env + funded mock token + initialized escrow
+let w = setup();                       // env + funded SAC + initialized escrow
 let escrow = w.escrow();
 let token = w.token();
 

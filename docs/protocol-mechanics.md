@@ -12,7 +12,7 @@ A job is an escrow record with a spend ceiling and a linear price:
 | `job_id` | `u64` | Monotonic id, allocated by `create_job` and starting at 1. |
 | `requester` | `Address` | The party paying for the compute. |
 | `runner` | `Address` | The party expected to execute the job. |
-| `payment_token` | `Address` | Token used to denominate the budget and payouts. |
+| `payment_token` | `Address` | Token used to denominate the budget and payouts; normally a Stellar Asset Contract (SAC). |
 | `max_budget` | `i128` | Collateral locked at creation; the absolute spend ceiling. |
 | `rate_per_second` | `i128` | Linear price, in token base units, per executed second. |
 | `max_duration_secs` | `u64` | Upper bound on billable seconds; also the unclaimed-job timeout. |

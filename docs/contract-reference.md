@@ -180,12 +180,24 @@ variant name. Codes are never renumbered.
 | 15 | `InvalidShare` | A dispute resolution award is outside `0..=max_budget`. |
 | 16 | `InvalidDisputeWindow` | The dispute window must be strictly positive. |
 
-## Mock token
+## Settlement asset
 
-[`contracts/mock_token/`](https://github.com/PulseRun-Labs/pulserun-core/tree/main/contracts/mock_token)
-implements just enough of the
-token surface for tests: `mint`, `burn`, `balance`, and `transfer` (with
-`from.require_auth()`). Amounts use checked arithmetic, and balance entries are
-TTL-extended on write. Its `mint` is unauthenticated and **test-only** — never
-deploy it as real money. In production, pass a SEP-41 token or its Stellar Asset
-Contract address as `payment_token`.
+`payment_token` must be the address of a SEP-41 token. On Stellar that is
+normally a **Stellar Asset Contract (SAC)**: the built-in contract that wraps a
+native or issued asset and exposes the standard `transfer`/`balance` interface.
+Resolve it with the Stellar CLI instead of deploying anything:
+
+```bash
+# Native XLM (the same id on every network)
+stellar contract id asset --asset native --network testnet
+
+# An issued asset (its SAC id is derived from CODE:ISSUER)
+stellar contract id asset --asset "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+```
+
+There is no token contract in this repository. The test suite registers a real
+SAC with `Env::register_stellar_asset_contract_v2`, mints test balances through
+`StellarAssetClient`, and asserts settlement against it — so the suite runs
+against Stellar's asset rail, not a lookalike. The escrow accepts any SEP-41
+token, which also means integrators must pass a token they trust: a malicious
+contract can revert transfers.

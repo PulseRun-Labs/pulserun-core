@@ -13,12 +13,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
-  # soroban-sdk v28 requires the build system to advertise spec-shaking support
-  # before it will emit a contract wasm. The Stellar CLI sets this itself; for a
-  # plain `cargo build --target wasm32v1-none` we set it here so CI can compile
-  # the wasm without installing the CLI. Deployment builds should still use
-  # `stellar contract build`.
-  SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: "1"
 
 jobs:
   lint-and-test:
@@ -55,8 +49,13 @@ jobs:
           toolchain: stable
           target: wasm32v1-none
 
+      # Soroban SDK 28+ requires `stellar contract build` (spec shaking); plain
+      # `cargo build` is not a supported way to produce a deployable contract.
+      - name: Install Stellar CLI
+        uses: stellar/stellar-cli@v30.0.1
+
       - name: Build contracts
-        run: cargo build --locked --target wasm32v1-none --release -p pulserun-escrow -p mock-token
+        run: stellar contract build
 
       - name: Upload wasm artifacts
         uses: actions/upload-artifact@v4

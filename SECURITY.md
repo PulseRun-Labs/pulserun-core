@@ -19,16 +19,17 @@ In scope:
 
 - All Soroban contracts under [`contracts/escrow/`](contracts/escrow/) —
   `PulseEscrow` and its storage, types, and error surface.
-- The test token under [`contracts/mock_token/`](contracts/mock_token/), where a
-  finding could mask a real escrow bug in tests.
 - Settlement arithmetic, authorization checks, state transitions, TTL/storage
   handling, and the claim/dispute/cancel flows.
+- The test harness in `contracts/escrow/src/test.rs`, where a finding could mask
+  a real escrow bug.
 
 Out of scope:
 
 - Third-party wallets, RPC providers, and Stellar network infrastructure outside
   this repository.
-- `mock_token`'s unauthenticated `mint` — it is test-only and documented as such.
+- The Stellar Asset Contract itself, including its SAC implementation and native
+  asset behaviour; report those to Stellar security.
 - Issues in forked or unpublished deployments that diverge from `main`.
 - Social engineering and denial-of-service against endpoints we do not run.
 
