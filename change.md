@@ -144,9 +144,8 @@ design. The dependency graph in `docs/architecture.md` shows the escrow calling
 the network's Stellar Asset Contract rather than a repository-owned token.
 
 The previously deployed v0.1.0 instance is preserved as **historical evidence**
-and clearly marked as legacy in `docs/deployments/testnet.md` and
-`docs/deployments/testnet.env`; it settled in the retired toy token. The current
-v0.3.0 build requires a fresh testnet deploy (see §4).
+and clearly marked as legacy in `docs/deployments/testnet.md`; it settled in the
+retired toy token. The v0.3.0 build is now deployed alongside it (see §4).
 
 ### 2.7 Version bump and lockfile
 
@@ -196,6 +195,24 @@ The 14 exports are the complete public ABI: `init`, `create_job`,
 `submit_proof`, `claim_payout`, `dispute_job`, `resolve_dispute`,
 `cancel_unclaimed_job`, `update_dispute_window`, and the six views.
 
+### On-chain settlement (testnet)
+
+The v0.3.0 build is deployed and settled a real job against the native XLM SAC:
+
+```text
+Escrow:       CAPNQ4LWFOVVJG76UHGAOUT4RL4OH2LJKQOY36KYU5JQ7SEJ5F4DSI2D
+Payment SAC:  CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+Admin:        GAFRQAM4VZDKUY5TL4PJFFLCAN5E7PPDXP3QCELHHMBP4QZZY54Q7IQP
+Job 1:        10_000_000 stroops locked, 20s proof, 60s window
+Early claim:  rejected with Error #11 (DisputeWindowActive)
+Final payout: 2_000_000 to runner, 8_000_000 refunded, escrow balance 0
+Status:       Settled
+```
+
+Transactions: upload `2e70d0c3…`, deploy `b25f75e1…`, init `c20632f2…`,
+create `b86876c8…`, proof `8b98b93a…`, claim `7a51c15c…`. Full hashes and
+explorer links are in `docs/deployments/testnet.md`.
+
 ### Toolchain versions used
 
 - `rustc 1.100.0` / `cargo 1.100.0`
@@ -204,21 +221,33 @@ The 14 exports are the complete public ABI: `init`, `create_job`,
 
 ---
 
-## 4. Remaining step: fresh testnet deployment
+## 4. Testnet deployment (completed)
 
-A current v0.3.0 instance has **not** been deployed by this change. That step
-requires a funded identity controlled by the maintainer, which this code change
-does not create. The path is ready:
+| Item | Value |
+| --- | --- |
+| Escrow | `CAPNQ4LWFOVVJG76UHGAOUT4RL4OH2LJKQOY36KYU5JQ7SEJ5F4DSI2D` |
+| Payment asset | Native XLM SAC `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
+| Admin | `GAFRQAM4VZDKUY5TL4PJFFLCAN5E7PPDXP3QCELHHMBP4QZZY54Q7IQP` |
+| WASM hash | `ac2afe1fb2c4e037cb781b3827ea0adc11c1edd34578f7245205603c54e69417` |
+| Dispute window | `60` seconds (shortened for the demo) |
 
-```bash
-PAYMENT_ASSET=native DISPUTE_WINDOW_SECS=86400 ./scripts/deploy-testnet.sh
-```
+A full settlement ran against the public network's SAC:
 
-The script prints the new escrow id, the resolved SAC id, and the admin address,
-and writes them to `docs/deployments/testnet.env`. The historical v0.1.0
-deployment and its transaction hashes remain valid on-chain evidence of the
-original settlement flow, but the appeal should not claim that the v0.3.0 build
-is deployed until this command has been run.
+- `create_job` locked `10_000_000` stroops (1 XLM) in the escrow.
+- `submit_proof` recorded a 20-second run.
+- `claim_payout` before the window was rejected with `Error #11`.
+- `claim_payout` after the window paid the runner `2_000_000` stroops and
+  refunded the requester `8_000_000`; the escrow balance returned to `0`.
+- Job status: `Settled`.
+
+Transactions: upload `2e70d0c3…`, deploy `b25f75e1…`, init `c20632f2…`,
+create `b86876c8…`, proof `8b98b93a…`, claim `7a51c15c…` (full hashes in
+`docs/deployments/testnet.md`).
+
+The admin is the testnet identity `pulserun-deployer` created for this
+installation. It is a throwaway testnet key; rotate or redeploy with a
+maintainer-controlled multisig admin before any real-value use. The historical
+v0.1.0 deployment remains available as additional evidence.
 
 ---
 
@@ -241,8 +270,8 @@ is deployed until this command has been run.
 | `docs/contract-reference.md` | Replace the mock-token section with the settlement-asset/SAC section |
 | `docs/developer-guide.md` | Stellar CLI prerequisite, canonical build, SAC fixtures |
 | `docs/protocol-mechanics.md` | `payment_token` documented as normally a SAC |
-| `docs/deployments/testnet.md` | Historical deployment marked legacy; current SAC deploy flow |
-| `docs/deployments/testnet.env` | Legacy record with the new SAC key names documented |
+| `docs/deployments/testnet.md` | Current v0.3.0 SAC deployment and settlement evidence; v0.1.0 history kept separate |
+| `docs/deployments/testnet.env` | Current v0.3.0 record: escrow id, native SAC id, admin, window |
 | `SECURITY.md` | Report scope now covers the escrow and its SAC test harness; SAC itself out of scope |
 | `Cargo.lock` | Regenerated without `mock-token`, with the `29.0.1` graph |
 
@@ -266,6 +295,9 @@ count is mostly the removed toy-token crate), plus this changelog.
 - **The test suite is stricter about Stellar behavior.** It exercises SAC
   transfers and their events, and covers the token-boundary failures that a
   handwritten mock could hide.
+- **It is live and verified on testnet.** The deployed v0.3.0 escrow settled a
+  real job in native XLM with the escrow draining to zero, not just in a local
+  test environment.
 
 ---
 
@@ -282,9 +314,10 @@ count is mostly the removed toy-token crate), plus this changelog.
 > SAC, clippy and fmt are clean, and `stellar contract build` produces a
 > 20,637-byte artifact with a 14-function ABI. Architecture, reference,
 > developer, contributing, security, and deployment docs were updated to match.
-> The remaining step is a fresh testnet deployment of v0.3.0 with the
-> maintainer's funded identity; the deploy script and docs are ready, and the
-> prior v0.1.0 on-chain settlement evidence is preserved.
+> The v0.3.0 build is deployed on testnet at `CAPNQ4LW…` and settled a real job
+> in the native XLM SAC: 2,000,000 stroops paid to the runner, 8,000,000
+> refunded to the requester, and the escrow drained to zero. The prior v0.1.0
+> on-chain settlement evidence is preserved as well.
 
 ---
 

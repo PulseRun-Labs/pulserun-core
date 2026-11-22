@@ -23,6 +23,7 @@ stellar/
 .env
 .env.*
 !.env.example
+.secrets/
 
 # mdBook build output
 book/
